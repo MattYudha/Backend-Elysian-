@@ -1,4 +1,11 @@
+ifneq (,$(wildcard .env))
+    include .env
+    export
+endif
+
 .PHONY: help run build test clean docker-up docker-down
+
+DB_URL="postgres://$(DB_USER):$(DB_PASSWORD)@$(DB_HOST):$(DB_PORT)/$(DB_NAME)?sslmode=$(DB_SSL_MODE)"
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -26,5 +33,20 @@ docker-down: ## Stop Docker services
 
 docker-logs: ## View Docker logs
 	docker-compose logs -f
+
+migrate-up: ## Run migrations
+	goose -dir migrations postgres $(DB_URL) up
+
+migrate-down: ## Rollback last migration
+	goose -dir migrations postgres $(DB_URL) down
+
+migrate-status: ## Check migration status
+	goose -dir migrations postgres $(DB_URL) status
+
+migrate-reset: ## Reset all migrations
+	goose -dir migrations postgres $(DB_URL) reset
+
+migrate-create: ## Create new migration (use: make migrate-create NAME=migration_name)
+	goose -dir migrations create $(NAME) sql
 
 .DEFAULT_GOAL := help
