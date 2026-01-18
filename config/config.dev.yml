@@ -1,0 +1,9 @@
+server:
+  environment: "development"
+
+logging:
+  level: "debug"
+  format: "text"
+
+database:
+  ssl_mode: "disable"

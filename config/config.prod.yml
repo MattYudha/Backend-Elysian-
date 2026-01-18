@@ -1,0 +1,25 @@
+server:
+  environment: "production"
+  read_timeout: 30s
+  write_timeout: 30s
+  graceful_shutdown_timeout: 60s
+
+database:
+  ssl_mode: "require"
+  max_open_conns: 100
+  max_idle_conns: 50
+
+redis:
+  pool_size: 50
+
+security:
+  rate_limit_requests_per_minute: 100
+  rate_limit_burst: 20
+
+logging:
+  level: "info"
+  format: "json"
+  output: "stdout"
+
+storage:
+  use_ssl: true
