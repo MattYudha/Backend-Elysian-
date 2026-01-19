@@ -11,38 +11,50 @@ import (
 	"time"
 
 	"github.com/Elysian-Rebirth/backend-go/internal/config"
+	"github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler"
+	"github.com/Elysian-Rebirth/backend-go/internal/delivery/http/routes"
+	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/database"
+	"github.com/Elysian-Rebirth/backend-go/internal/middleware"
+	postgresRepo "github.com/Elysian-Rebirth/backend-go/internal/repository/postgres"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
-	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	// Log loaded configuration (with masked sensitive values)
-	log.Printf("Configuration loaded successfully")
+	log.Printf("Configuration loaded")
 	log.Printf("Environment: %s", cfg.Server.Environment)
-	log.Printf("Server: %s:%s", cfg.Server.Host, cfg.Server.Port)
-	log.Printf("Database: %s@%s:%s/%s", cfg.Database.User, cfg.Database.Host, cfg.Database.Port, cfg.Database.Name)
 
-	// Set Gin mode based on environment
-	if cfg.IsProduction() {
-		gin.SetMode(gin.ReleaseMode)
-	} else {
-		gin.SetMode(gin.DebugMode)
+	db, err := database.NewPostgresDB(cfg)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
 	}
 
-	// Create Gin router
+	if err := database.HealthCheck(db); err != nil {
+		log.Fatalf("Database health check failed: %v", err)
+	}
+	log.Printf("Database is healthy")
+
+	userRepo := postgresRepo.NewUserRepository(db)
+	roleRepo := postgresRepo.NewRoleRepository(db)
+	_ = roleRepo
+
+	log.Printf("Repositories initialized")
+
+	healthHandler := handler.NewHealthHandler(cfg, db)
+	userHandler := handler.NewUserHandler(userRepo)
+
+	if cfg.IsProduction() {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
 	router := gin.New()
-
-	// Middleware
-	router.Use(gin.Recovery())
-	router.Use(gin.Logger())
-
-	// CORS middleware
+	router.Use(middleware.Recovery())
+	router.Use(middleware.Logger())
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     cfg.Security.CORSAllowedOrigins,
 		AllowMethods:     cfg.Security.CORSAllowedMethods,
@@ -51,26 +63,8 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 
-	// Health check endpoint
-	router.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status":      "ok",
-			"environment": cfg.Server.Environment,
-			"timestamp":   time.Now().Unix(),
-		})
-	})
+	routes.SetupRoutes(router, healthHandler, userHandler)
 
-	// API v1 routes
-	v1 := router.Group("/api/v1")
-	{
-		v1.GET("/ping", func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{
-				"message": "pong",
-			})
-		})
-	}
-
-	// Create HTTP server
 	addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
 	srv := &http.Server{
 		Addr:         addr,
@@ -80,7 +74,6 @@ func main() {
 		IdleTimeout:  cfg.Server.IdleTimeout,
 	}
 
-	// Start server in goroutine
 	go func() {
 		log.Printf("Server starting on %s", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -88,18 +81,21 @@ func main() {
 		}
 	}()
 
-	// Wait for interrupt signal for graceful shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	<-quit
 
 	log.Println("Shutting down server...")
 
-	// Create shutdown context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.GracefulShutdownTimeout)
 	defer cancel()
 
-	// Attempt graceful shutdown
+	if err := database.Close(db); err != nil {
+		log.Printf("Error closing database: %v", err)
+	} else {
+		log.Println("Database closed")
+	}
+
 	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
