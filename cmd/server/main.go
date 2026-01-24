@@ -13,6 +13,7 @@ import (
 	"github.com/Elysian-Rebirth/backend-go/internal/config"
 	"github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler"
 	"github.com/Elysian-Rebirth/backend-go/internal/delivery/http/routes"
+	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/cache"
 	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/database"
 	"github.com/Elysian-Rebirth/backend-go/internal/middleware"
 	postgresRepo "github.com/Elysian-Rebirth/backend-go/internal/repository/postgres"
@@ -39,13 +40,19 @@ func main() {
 	}
 	log.Printf("Database is healthy")
 
+	redisCache, err := cache.NewRedisCache(cfg)
+	if err != nil {
+		log.Fatalf("failed to connect to Redis: %v", err)
+	}
+	log.Printf("Redis connectin established")
+
 	userRepo := postgresRepo.NewUserRepository(db)
 	roleRepo := postgresRepo.NewRoleRepository(db)
 	_ = roleRepo
 
 	log.Printf("Repositories initialized")
 
-	healthHandler := handler.NewHealthHandler(cfg, db)
+	healthHandler := handler.NewHealthHandler(cfg, db, redisCache)
 	userHandler := handler.NewUserHandler(userRepo)
 
 	if cfg.IsProduction() {
@@ -89,6 +96,12 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.GracefulShutdownTimeout)
 	defer cancel()
+
+	if err := redisCache.Close(); err != nil {
+		log.Printf("Error closing Redis: %v", err)
+	} else {
+		log.Printf("Redis connection closed")
+	}
 
 	if err := database.Close(db); err != nil {
 		log.Printf("Error closing database: %v", err)
