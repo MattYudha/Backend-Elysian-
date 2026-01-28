@@ -12,19 +12,60 @@ import (
 )
 
 type HealthHandler struct {
-	cfg *config.Config
-	db  *gorm.DB
+	cfg   *config.Config
+	db    *gorm.DB
 	cache cache.Cache
 }
 
 func NewHealthHandler(cfg *config.Config, db *gorm.DB, cache cache.Cache) *HealthHandler {
 	return &HealthHandler{
-		cfg: cfg,
-		db:  db,
+		cfg:   cfg,
+		db:    db,
 		cache: cache,
 	}
 }
 
+// Request and Response structs
+
+type ErrorResponse struct {
+	Error   string   `json:"error"`
+	Details []string `json:"details,omitempty"`
+}
+
+type SuccessResponse struct {
+	Message string `json:"message"`
+}
+
+type PingResponse struct {
+	Message string `json:"message"`
+}
+
+type HealthResponse struct {
+	Status      string                 `json:"status"`
+	Environment string                 `json:"environment"`
+	Timestamp   int64                  `json:"timestamp"`
+	Database    DatabaseHealthResponse `json:"database"`
+	Cache       CacheHealthResponse    `json:"cache"`
+}
+
+type DatabaseHealthResponse struct {
+	Healthy bool                   `json:"healthy"`
+	Stats   map[string]interface{} `json:"stats"`
+}
+
+type CacheHealthResponse struct {
+	Healthy bool                   `json:"healthy"`
+	Stats   map[string]interface{} `json:"stats"`
+}
+
+// Check godoc
+// @Summary      Health Check
+// @Description  Check the health of the application (database and cache)
+// @Tags         health
+// @Produce      json
+// @Success      200  {object}  HealthResponse
+// @Failure      503  {object}  HealthResponse
+// @Router       /health [get]
 func (h *HealthHandler) Check(c *gin.Context) {
 	dbHealthy := true
 	if err := database.HealthCheck(h.db); err != nil {
@@ -47,23 +88,30 @@ func (h *HealthHandler) Check(c *gin.Context) {
 
 	cacheStats, _ := h.cache.(*cache.RedisCache).GetStats(c.Request.Context())
 
-	c.JSON(httpStatus, gin.H{
-		"status":      status,
-		"environment": h.cfg.Server.Environment,
-		"timestamp":   time.Now().Unix(),
-		"database": gin.H{
-			"healthy": dbHealthy,
-			"stats":   dbStats,
+	c.JSON(httpStatus, HealthResponse{
+		Status:      status,
+		Environment: h.cfg.Server.Environment,
+		Timestamp:   time.Now().Unix(),
+		Database: DatabaseHealthResponse{
+			Healthy: dbHealthy,
+			Stats:   dbStats,
 		},
-		"cache": gin.H{
-			"healthy": cacheHealthy,
-			"stats": cacheStats,
+		Cache: CacheHealthResponse{
+			Healthy: cacheHealthy,
+			Stats:   cacheStats,
 		},
 	})
 }
 
+// Ping godoc
+// @Summary      Ping
+// @Description  Simple ping endpoint
+// @Tags         health
+// @Produce      json
+// @Success      200  {object}  PingResponse
+// @Router       /api/v1/ping [get]
 func (h *HealthHandler) Ping(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{
-		"message": "pong",
+	c.JSON(http.StatusOK, PingResponse{
+		Message: "pong",
 	})
 }

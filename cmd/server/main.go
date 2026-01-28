@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	_ "github.com/Elysian-Rebirth/backend-go/docs"
 	"github.com/Elysian-Rebirth/backend-go/internal/config"
 	"github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler"
 	"github.com/Elysian-Rebirth/backend-go/internal/delivery/http/routes"
@@ -17,10 +18,31 @@ import (
 	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/database"
 	"github.com/Elysian-Rebirth/backend-go/internal/middleware"
 	postgresRepo "github.com/Elysian-Rebirth/backend-go/internal/repository/postgres"
+	"github.com/Elysian-Rebirth/backend-go/internal/usecase/auth"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
+// @title           Elysian Backend API
+// @version         1.0.0
+// @description     Elysian Backend API provides user authentication, management, and health check endpoints. Built with Go and Gin framework.
+// @termsOfService  http://swagger.io/terms/
+
+// @contact.name    API Support
+// @contact.url     http://www.swagger.io/support
+// @contact.email   support@swagger.io
+
+// @license.name    Apache 2.0
+// @license.url     http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host            localhost:7777
+// @BasePath        /
+
+// @schemes         http https
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -52,9 +74,6 @@ func main() {
 
 	log.Printf("Repositories initialized")
 
-	healthHandler := handler.NewHealthHandler(cfg, db, redisCache)
-	userHandler := handler.NewUserHandler(userRepo)
-
 	if cfg.IsProduction() {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -70,7 +89,19 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 
-	routes.SetupRoutes(router, healthHandler, userHandler)
+	passwordSvc := auth.NewPasswordService()
+	jwtSvc := auth.NewJWTService(cfg.JWT)
+	cacheKeyBuilder := cache.NewCacheKeyBuilder("elysian")
+
+	authUseCase := auth.NewAuthUseCase(userRepo, passwordSvc, jwtSvc, redisCache, cacheKeyBuilder)
+
+	healthHandler := handler.NewHealthHandler(cfg, db, redisCache)
+	userHandler := handler.NewUserHandler(userRepo)
+	authHandler := handler.NewAuthHandler(authUseCase, cfg.IsProduction())
+
+	authMiddleware := middleware.AuthMiddleware(jwtSvc, userRepo)
+
+	routes.SetupRoutes(router, healthHandler, userHandler, authHandler, authMiddleware)
 
 	addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
 	srv := &http.Server{
