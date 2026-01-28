@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"time"
 
 	"gorm.io/datatypes"
@@ -17,6 +18,49 @@ type Role struct {
 
 func (Role) TableName() string {
 	return "roles"
+}
+
+func (r *Role) GetPermissions() []string {
+	var perms []string
+
+	if err := json.Unmarshal(r.Permissions, &perms); err != nil {
+		return []string{}
+	}
+
+	return perms
+}
+
+func (r *Role) HasPermission(permission string) bool {
+	perms := r.GetPermissions()
+
+	for _, perm := range perms {
+		if perm == "*" || perm == permission {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (r *Role) HasAllPermissions(permissions ...string) bool {
+	perms := r.GetPermissions()
+	permMap := make(map[string]bool)
+
+	for _, perm := range perms {
+		permMap[perm] = true
+	}
+
+	if permMap["*"] {
+		return true
+	}
+
+	for _, required := range permissions {
+		if !permMap[required] {
+			return false
+		}
+	}
+
+	return true
 }
 
 type UserRole struct {

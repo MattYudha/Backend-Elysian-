@@ -2,6 +2,7 @@ package routes
 
 import (
 	"github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler"
+	"github.com/Elysian-Rebirth/backend-go/internal/middleware"
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -36,7 +37,6 @@ func SetupRoutes(
 		// Users
 		users := v1.Group("/users")
 		{
-			users.GET("", userHandler.List)
 			users.GET("/:id", userHandler.GetByID)
 			users.GET("/email/:email", userHandler.GetByEmail)
 
@@ -46,6 +46,13 @@ func SetupRoutes(
 				protected.GET("/me", userHandler.GetMe)       // Get current user
 				protected.PUT("/me", userHandler.UpdateMe)    // Update current user
 				protected.DELETE("/me", userHandler.DeleteMe) // Delete current user
+
+				// Admin only routes
+				admin := protected.Group("")
+				admin.Use(middleware.RequireRole("admin"))
+				{
+					admin.GET("", userHandler.List)
+				}
 			}
 		}
 	}

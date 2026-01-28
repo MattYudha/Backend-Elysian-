@@ -99,7 +99,7 @@ func main() {
 	userHandler := handler.NewUserHandler(userRepo)
 	authHandler := handler.NewAuthHandler(authUseCase, cfg.IsProduction())
 
-	authMiddleware := middleware.AuthMiddleware(jwtSvc, userRepo)
+	authMiddleware := middleware.AuthMiddleware(jwtSvc, userRepo, roleRepo)
 
 	routes.SetupRoutes(router, healthHandler, userHandler, authHandler, authMiddleware)
 

@@ -10,7 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func AuthMiddleware(jwtSvc *auth.JWTService, userRepo repository.UserRepository) gin.HandlerFunc {
+func AuthMiddleware(jwtSvc *auth.JWTService, userRepo repository.UserRepository, roleRepo repository.RoleRepository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
@@ -58,15 +58,21 @@ func AuthMiddleware(jwtSvc *auth.JWTService, userRepo repository.UserRepository)
 			return
 		}
 
+		roles, err := roleRepo.GetUserRoles(c.Request.Context(), user.ID)
+		if err != nil {
+			roles = []*domain.Role{}
+		}
+
 		c.Set("user", user)
 		c.Set("user_id", user.ID)
 		c.Set("user_email", user.Email)
+		c.Set("user_roles", roles)
 
 		c.Next()
 	}
 }
 
-func OptionalAuth(jwtSvc *auth.JWTService, userRepo repository.UserRepository) gin.HandlerFunc {
+func OptionalAuth(jwtSvc *auth.JWTService, userRepo repository.UserRepository, roleRepo repository.RoleRepository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
@@ -93,8 +99,11 @@ func OptionalAuth(jwtSvc *auth.JWTService, userRepo repository.UserRepository) g
 			return
 		}
 
+		roles, _ := roleRepo.GetUserRoles(c.Request.Context(), user.ID)
+
 		c.Set("user", user)
 		c.Set("user_id", user.ID)
+		c.Set("user_roles", roles)
 		c.Next()
 	}
 }
@@ -115,4 +124,14 @@ func MustGetUserFromContext(c *gin.Context) *domain.User {
 		panic("user not found in context - did you forget AuthMiddleware?")
 	}
 	return user
+}
+
+func GetUserRolesFromContext(c *gin.Context) ([]*domain.Role, bool) {
+	roles, exists := c.Get("user_roles")
+	if !exists {
+		return nil, false
+	}
+
+	r, ok := roles.([]*domain.Role)
+	return r, ok
 }
