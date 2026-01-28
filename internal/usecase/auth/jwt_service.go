@@ -26,32 +26,32 @@ func NewJWTService(cfg config.JWTConfig) *JWTService {
 }
 
 func (s *JWTService) GenerateAccessToken(userID, email string) (string, error) {
-    claims := &Claims{
-        UserID: userID,
-        Email:  email,
-        RegisteredClaims: jwt.RegisteredClaims{
-            ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.cfg.AccessTokenExpiry)),
-            IssuedAt:  jwt.NewNumericDate(time.Now()),
-            Issuer:    s.cfg.Issuer,
-        },
-    }
+	claims := &Claims{
+		UserID: userID,
+		Email:  email,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.cfg.AccessTokenExpiry)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			Issuer:    s.cfg.Issuer,
+		},
+	}
 
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-    return token.SignedString([]byte(s.cfg.Secret))
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(s.cfg.Secret))
 }
 
 func (s *JWTService) GenerateRefreshToken(userID string) (string, error) {
-    claims := &Claims{
-        UserID: userID,
-        RegisteredClaims: jwt.RegisteredClaims{
-            ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.cfg.RefreshTokenExpiry)),
-            IssuedAt:  jwt.NewNumericDate(time.Now()),
-            Issuer:    s.cfg.Issuer,
-        },
-    }
+	claims := &Claims{
+		UserID: userID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(s.cfg.RefreshTokenExpiry)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			Issuer:    s.cfg.Issuer,
+		},
+	}
 
-    token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-    return token.SignedString([]byte(s.cfg.Secret))
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(s.cfg.Secret))
 }
 
 func (s *JWTService) ValidateToken(tokenString string) (*Claims, error) {

@@ -16,7 +16,7 @@ type RedisCache struct {
 
 func NewRedisCache(cfg *config.Config) (Cache, error) {
 	client := redis.NewClient(&redis.Options{
-		Addr: cfg.GetRedisDSN(),
+		Addr:         cfg.GetRedisDSN(),
 		Password:     cfg.Redis.Password,
 		DB:           cfg.Redis.DB,
 		PoolSize:     cfg.Redis.PoolSize,
@@ -217,4 +217,3 @@ func parseRedisInfo(info string) map[string]string {
 func (c *RedisCache) GetClient() *redis.Client {
 	return c.client
 }
-

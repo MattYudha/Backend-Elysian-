@@ -47,10 +47,10 @@ type RedisConfig struct {
 }
 
 type JWTConfig struct {
-	Secret              string        `mapstructure:"secret" validate:"required,min=32"`
-	AccessTokenExpiry   time.Duration `mapstructure:"access_token_expiry" validate:"required"`
-	RefreshTokenExpiry  time.Duration `mapstructure:"refresh_token_expiry" validate:"required"`
-	Issuer              string        `mapstructure:"issuer"`
+	Secret             string        `mapstructure:"secret" validate:"required,min=32"`
+	AccessTokenExpiry  time.Duration `mapstructure:"access_token_expiry" validate:"required"`
+	RefreshTokenExpiry time.Duration `mapstructure:"refresh_token_expiry" validate:"required"`
+	Issuer             string        `mapstructure:"issuer"`
 }
 
 type RabbitMQConfig struct {
@@ -69,10 +69,10 @@ type StorageConfig struct {
 }
 
 type MLConfig struct {
-	ServiceURL   string        `mapstructure:"service_url"`
-	Timeout      time.Duration `mapstructure:"timeout"`
-	RetryCount   int           `mapstructure:"retry_count" validate:"min=0"`
-	RetryDelay   time.Duration `mapstructure:"retry_delay"`
+	ServiceURL string        `mapstructure:"service_url"`
+	Timeout    time.Duration `mapstructure:"timeout"`
+	RetryCount int           `mapstructure:"retry_count" validate:"min=0"`
+	RetryDelay time.Duration `mapstructure:"retry_delay"`
 }
 
 type SecurityConfig struct {
