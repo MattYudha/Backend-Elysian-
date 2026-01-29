@@ -20,7 +20,7 @@ A Go-based API server for workflow management and execution, built with Fiber fr
 
 2. **Start services**:
    ```bash
-   make docker-up  # PostgreSQL + Redis
+   make docker-up
    make migrate-up # Run database migrations
    ```
 
@@ -28,6 +28,10 @@ A Go-based API server for workflow management and execution, built with Fiber fr
    ```bash
    make run
    ```
+4. **Open the Toolbox dev**:
+```
+http://localhost
+```
 
 The API will be available at `http://localhost:7777`
 
