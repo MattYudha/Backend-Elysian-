@@ -110,7 +110,10 @@ func main() {
 	workflowHandler := handler.NewWorkflowHandler(workflowUseCase)
 
 	// Infrastructure Components
-	agentFactory := agent.NewAgentFactory(cfg.AI.GeminiAPIKey, cfg.Redis.Host+":"+cfg.Redis.Port)
+	agentFactory, err := agent.NewAgentFactory(context.Background(), cfg.AI.GeminiAPIKey, cfg.Redis.Host+":"+cfg.Redis.Port)
+	if err != nil {
+		log.Fatalf("Failed to initialize Agent Factory: %v", err)
+	}
 
 	// Execution Components
 	executionRepo := postgresRepo.NewExecutionRepository(db)
@@ -145,6 +148,12 @@ func main() {
 
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.GracefulShutdownTimeout)
 	defer cancel()
+
+	if err := agentFactory.Close(); err != nil {
+		log.Printf("Error closing AgentFactory: %v", err)
+	} else {
+		log.Printf("AgentFactory (GenAI) connections closed")
+	}
 
 	if err := redisCache.Close(); err != nil {
 		log.Printf("Error closing Redis: %v", err)
