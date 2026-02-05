@@ -14,11 +14,15 @@ import (
 	"github.com/Elysian-Rebirth/backend-go/internal/config"
 	"github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler"
 	"github.com/Elysian-Rebirth/backend-go/internal/delivery/http/routes"
+
+	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/agent"
 	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/cache"
 	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/database"
 	"github.com/Elysian-Rebirth/backend-go/internal/middleware"
 	postgresRepo "github.com/Elysian-Rebirth/backend-go/internal/repository/postgres"
 	"github.com/Elysian-Rebirth/backend-go/internal/usecase/auth"
+	"github.com/Elysian-Rebirth/backend-go/internal/usecase/engine"
+	"github.com/Elysian-Rebirth/backend-go/internal/usecase/workflow"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
@@ -85,6 +89,7 @@ func main() {
 		AllowOrigins:     cfg.Security.CORSAllowedOrigins,
 		AllowMethods:     cfg.Security.CORSAllowedMethods,
 		AllowHeaders:     cfg.Security.CORSAllowedHeaders,
+		ExposeHeaders:    []string{"Content-Length", "Authorization"},
 		AllowCredentials: cfg.Security.CORSAllowCredentials,
 		MaxAge:           12 * time.Hour,
 	}))
@@ -99,9 +104,22 @@ func main() {
 	userHandler := handler.NewUserHandler(userRepo)
 	authHandler := handler.NewAuthHandler(authUseCase, cfg.IsProduction())
 
+	// Workflow Components
+	workflowRepo := postgresRepo.NewWorkflowRepository(db)
+	workflowUseCase := workflow.NewWorkflowUseCase(workflowRepo)
+	workflowHandler := handler.NewWorkflowHandler(workflowUseCase)
+
+	// Infrastructure Components
+	agentFactory := agent.NewAgentFactory(cfg.AI.GeminiAPIKey, cfg.Redis.Host+":"+cfg.Redis.Port)
+
+	// Execution Components
+	executionRepo := postgresRepo.NewExecutionRepository(db)
+	wfEngine := engine.NewEngine(executionRepo, agentFactory)
+	executionHandler := handler.NewExecutionHandler(wfEngine, executionRepo, workflowRepo)
+
 	authMiddleware := middleware.AuthMiddleware(jwtSvc, userRepo, roleRepo)
 
-	routes.SetupRoutes(router, healthHandler, userHandler, authHandler, authMiddleware)
+	routes.SetupRoutes(router, healthHandler, userHandler, authHandler, workflowHandler, executionHandler, authMiddleware)
 
 	addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
 	srv := &http.Server{

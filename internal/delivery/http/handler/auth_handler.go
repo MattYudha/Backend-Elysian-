@@ -71,11 +71,16 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	h.setRefreshTokenCookie(c, res.RefreshToken)
 
-	c.JSON(http.StatusCreated, AuthResponse{
-		Message:      "User registered successfully",
-		AccessToken:  res.AccessToken,
-		RefreshToken: res.RefreshToken,
-		User:         res.User,
+	h.setRefreshTokenCookie(c, res.RefreshToken)
+
+	res.User.SetComputedRole()
+
+	c.JSON(http.StatusCreated, gin.H{
+		"status": "success",
+		"data": gin.H{
+			"access_token": res.AccessToken,
+			"user":         res.User,
+		},
 	})
 }
 
@@ -106,11 +111,16 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	h.setRefreshTokenCookie(c, res.RefreshToken)
 
-	c.JSON(http.StatusOK, AuthResponse{
-		Message:      "Login successful",
-		AccessToken:  res.AccessToken,
-		RefreshToken: res.RefreshToken,
-		User:         res.User,
+	h.setRefreshTokenCookie(c, res.RefreshToken)
+
+	res.User.SetComputedRole()
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data": gin.H{
+			"access_token": res.AccessToken,
+			"user":         res.User,
+		},
 	})
 }
 
@@ -153,11 +163,12 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		h.setRefreshTokenCookie(c, res.RefreshToken)
 	}
 
-	c.JSON(http.StatusOK, AuthResponse{
-		Message:      "Token refreshed successfully",
-		AccessToken:  res.AccessToken,
-		RefreshToken: res.RefreshToken,
-		User:         res.User,
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data": gin.H{
+			"access_token": res.AccessToken,
+			"user":         res.User,
+		},
 	})
 }
 

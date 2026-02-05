@@ -18,8 +18,23 @@ type User struct {
 	CreatedAt       time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt       time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt       gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty" swaggertype:"string" format:"date-time"`
+
+	// Relations
+	Roles []Role `gorm:"many2many:user_roles" json:"-"`
+
+	// Computed Fields (Frontend Only)
+	Role string `gorm:"-" json:"role"`
 }
 
 func (User) TableName() string {
 	return "users"
+}
+
+func (u *User) SetComputedRole() {
+	if len(u.Roles) > 0 {
+		// Take the first role as the primary role
+		u.Role = u.Roles[0].Name
+	} else {
+		u.Role = "viewer" // Default fallback
+	}
 }

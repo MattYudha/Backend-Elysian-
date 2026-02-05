@@ -140,6 +140,17 @@ func overrideWithEnv(cfg *Config) {
 	if v := os.Getenv("ML_SERVICE_URL"); v != "" {
 		cfg.ML.ServiceURL = v
 	}
+
+	// AI
+	if v := os.Getenv("AI_DEEPSEEK_API_KEY"); v != "" {
+		cfg.AI.DeepSeekAPIKey = v
+	}
+	if v := os.Getenv("AI_OPENAI_API_KEY"); v != "" {
+		cfg.AI.OpenAIAPIKey = v
+	}
+	if v := os.Getenv("AI_GEMINI_API_KEY"); v != "" {
+		cfg.AI.GeminiAPIKey = v
+	}
 }
 
 // MaskSensitive returns a copy of the config with sensitive values masked

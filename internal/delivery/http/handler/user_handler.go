@@ -143,15 +143,21 @@ func (h *UserHandler) GetByEmail(c *gin.Context) {
 // @Success      200  {object}  UserResponse
 // @Router       /api/v1/users/me [get]
 func (h *UserHandler) GetMe(c *gin.Context) {
-	user := middleware.MustGetUserFromContext(c)
+	currentUser := middleware.MustGetUserFromContext(c)
 
-	c.JSON(http.StatusOK, UserResponse{
-		ID:        user.ID,
-		Email:     user.Email,
-		Name:      user.Name,
-		AvatarURL: user.AvatarURL,
-		IsActive:  user.IsActive,
-		CreatedAt: user.CreatedAt,
+	// Fetch fresh user data with roles (Repository has Preload)
+	user, err := h.userRepo.FindByID(c.Request.Context(), currentUser.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to fetch user profile"})
+		return
+	}
+
+	// Compute Role for Frontend
+	user.SetComputedRole()
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data":   user,
 	})
 }
 

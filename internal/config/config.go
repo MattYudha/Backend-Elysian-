@@ -13,6 +13,13 @@ type Config struct {
 	Security SecurityConfig `mapstructure:"security"`
 	Logging  LoggingConfig  `mapstructure:"logging"`
 	Upload   UploadConfig   `mapstructure:"upload"`
+	AI       AIConfig       `mapstructure:"ai"`
+}
+
+type AIConfig struct {
+	DeepSeekAPIKey string `mapstructure:"deepseek_api_key"`
+	OpenAIAPIKey   string `mapstructure:"openai_api_key"`
+	GeminiAPIKey   string `mapstructure:"gemini_api_key"`
 }
 
 type ServerConfig struct {
