@@ -27,8 +27,6 @@ func (r *workflowRepository) Create(ctx context.Context, workflow *domain.Workfl
 func (r *workflowRepository) FindByID(ctx context.Context, id string) (*domain.Workflow, error) {
 	var workflow domain.Workflow
 	err := r.db.WithContext(ctx).
-		Preload("Nodes").
-		Preload("Edges").
 		Where("id = ?", id).
 		First(&workflow).Error
 
@@ -83,38 +81,34 @@ func (r *workflowRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// UpdateGraph implements the "Nuke & Pave" strategy transactionally
-func (r *workflowRepository) UpdateGraph(ctx context.Context, workflowID string, nodes []domain.WorkflowNode, edges []domain.WorkflowEdge) error {
-	return r.db.Transaction(func(tx *gorm.DB) error {
-		// 1. Delete existing Edges (Edges depend on Nodes, so delete first)
-		if err := tx.Where("workflow_id = ?", workflowID).Delete(&domain.WorkflowEdge{}).Error; err != nil {
-			return fmt.Errorf("failed to delete edges: %w", err)
-		}
+// UpdateGraph is deprecated in the new versioning system. Replaced by WorkflowVersion.
+// This is a stub to satisfy interfaces until the DAG engine is rebuilt.
+func (r *workflowRepository) UpdateGraph(ctx context.Context, workflowID string, configuration []byte) error {
+	return fmt.Errorf("Not Implemented: DAG Engine requires WorkflowVersion")
+}
 
-		// 2. Delete existing Nodes
-		if err := tx.Where("workflow_id = ?", workflowID).Delete(&domain.WorkflowNode{}).Error; err != nil {
-			return fmt.Errorf("failed to delete nodes: %w", err)
-		}
+func (r *workflowRepository) GetVersionByID(ctx context.Context, versionID string) (*domain.WorkflowVersion, error) {
+	var version domain.WorkflowVersion
+	err := r.db.WithContext(ctx).Where("id = ?", versionID).First(&version).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, fmt.Errorf("workflow version not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to find workflow version: %w", err)
+	}
+	return &version, nil
+}
 
-		// 3. Bulk Insert Nodes
-		if len(nodes) > 0 {
-			if err := tx.Create(&nodes).Error; err != nil {
-				return fmt.Errorf("failed to insert nodes: %w", err)
-			}
-		}
+func (r *workflowRepository) CreatePipeline(ctx context.Context, pipeline *domain.Pipeline) error {
+	if err := r.db.WithContext(ctx).Create(pipeline).Error; err != nil {
+		return fmt.Errorf("failed to create pipeline: %w", err)
+	}
+	return nil
+}
 
-		// 4. Bulk Insert Edges
-		if len(edges) > 0 {
-			if err := tx.Create(&edges).Error; err != nil {
-				return fmt.Errorf("failed to insert edges: %w", err)
-			}
-		}
-
-		// 5. Explicitly update workflow updated_at
-		if err := tx.Model(&domain.Workflow{}).Where("id = ?", workflowID).Update("updated_at", gorm.Expr("current_timestamp")).Error; err != nil {
-			return err
-		}
-
-		return nil
-	})
+func (r *workflowRepository) UpdatePipeline(ctx context.Context, pipeline *domain.Pipeline) error {
+	if err := r.db.WithContext(ctx).Save(pipeline).Error; err != nil {
+		return fmt.Errorf("failed to update pipeline: %w", err)
+	}
+	return nil
 }

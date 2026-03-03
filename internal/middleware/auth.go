@@ -4,13 +4,17 @@ import (
 	"net/http"
 	"strings"
 
+	"encoding/json"
+	"time"
+
 	"github.com/Elysian-Rebirth/backend-go/internal/domain"
 	"github.com/Elysian-Rebirth/backend-go/internal/domain/repository"
 	"github.com/Elysian-Rebirth/backend-go/internal/usecase/auth"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 )
 
-func AuthMiddleware(jwtSvc *auth.JWTService, userRepo repository.UserRepository, roleRepo repository.RoleRepository) gin.HandlerFunc {
+func AuthMiddleware(jwtSvc *auth.JWTService, userRepo repository.UserRepository, roleRepo repository.RoleRepository, redisClient *redis.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
@@ -50,17 +54,28 @@ func AuthMiddleware(jwtSvc *auth.JWTService, userRepo repository.UserRepository,
 			return
 		}
 
-		if !user.IsActive {
-			c.JSON(http.StatusForbidden, gin.H{
-				"error": "Account is disabled",
-			})
-			c.Abort()
-			return
-		}
+		// IsActive check removed - field no longer exists in enterprise schema
+		// If needed, check tenant_users status instead
 
-		roles, err := roleRepo.GetUserRoles(c.Request.Context(), user.ID)
-		if err != nil {
-			roles = []*domain.Role{}
+		tenantID := c.GetHeader("X-Tenant-ID")
+
+		cacheKey := "auth:rbac:" + tenantID + ":" + user.ID.String()
+		var roles []*domain.Role
+
+		// Try Redis First
+		cachedRoles, err := redisClient.Get(c.Request.Context(), cacheKey).Result()
+		if err == nil && cachedRoles != "" {
+			json.Unmarshal([]byte(cachedRoles), &roles)
+		} else {
+			// Cache Miss
+			roles, err = roleRepo.GetUserRoles(c.Request.Context(), tenantID, user.ID.String())
+			if err != nil {
+				roles = []*domain.Role{}
+			} else {
+				// Set Cache (Synchronous write to ensure immediate availability)
+				rolesBytes, _ := json.Marshal(roles)
+				redisClient.Set(c.Request.Context(), cacheKey, rolesBytes, 30*time.Minute)
+			}
 		}
 
 		c.Set("user", user)
@@ -72,7 +87,7 @@ func AuthMiddleware(jwtSvc *auth.JWTService, userRepo repository.UserRepository,
 	}
 }
 
-func OptionalAuth(jwtSvc *auth.JWTService, userRepo repository.UserRepository, roleRepo repository.RoleRepository) gin.HandlerFunc {
+func OptionalAuth(jwtSvc *auth.JWTService, userRepo repository.UserRepository, roleRepo repository.RoleRepository, redisClient *redis.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
@@ -99,7 +114,18 @@ func OptionalAuth(jwtSvc *auth.JWTService, userRepo repository.UserRepository, r
 			return
 		}
 
-		roles, _ := roleRepo.GetUserRoles(c.Request.Context(), user.ID)
+		tenantID := c.GetHeader("X-Tenant-ID")
+
+		cacheKey := "auth:rbac:" + tenantID + ":" + user.ID.String()
+		var roles []*domain.Role
+		cachedRoles, err := redisClient.Get(c.Request.Context(), cacheKey).Result()
+		if err == nil && cachedRoles != "" {
+			json.Unmarshal([]byte(cachedRoles), &roles)
+		} else {
+			roles, _ = roleRepo.GetUserRoles(c.Request.Context(), tenantID, user.ID.String())
+			rolesBytes, _ := json.Marshal(roles)
+			redisClient.Set(c.Request.Context(), cacheKey, rolesBytes, 30*time.Minute)
+		}
 
 		c.Set("user", user)
 		c.Set("user_id", user.ID)
@@ -134,4 +160,10 @@ func GetUserRolesFromContext(c *gin.Context) ([]*domain.Role, bool) {
 
 	r, ok := roles.([]*domain.Role)
 	return r, ok
+}
+
+// MustGetTenantIDFromContext reads X-Tenant-ID from the request header.
+// Returns an empty string if the header is absent (not fatal for optional-tenant routes).
+func MustGetTenantIDFromContext(c *gin.Context) string {
+	return c.GetHeader("X-Tenant-ID")
 }

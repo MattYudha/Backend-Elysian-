@@ -73,8 +73,6 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	h.setRefreshTokenCookie(c, res.RefreshToken)
 
-	res.User.SetComputedRole()
-
 	c.JSON(http.StatusCreated, gin.H{
 		"status": "success",
 		"data": gin.H{
@@ -112,8 +110,6 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	h.setRefreshTokenCookie(c, res.RefreshToken)
 
 	h.setRefreshTokenCookie(c, res.RefreshToken)
-
-	res.User.SetComputedRole()
 
 	c.JSON(http.StatusOK, gin.H{
 		"status": "success",

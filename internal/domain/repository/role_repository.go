@@ -13,7 +13,7 @@ type RoleRepository interface {
 	Update(ctx context.Context, role *domain.Role) error
 	Delete(ctx context.Context, id string) error
 	List(ctx context.Context) ([]*domain.Role, error)
-	AssignToUser(ctx context.Context, userID, roleID string) error
-	RemoveFromUser(ctx context.Context, userID, roleID string) error
-	GetUserRoles(ctx context.Context, userID string) ([]*domain.Role, error)
+	AssignToUser(ctx context.Context, tenantID, userID, roleID string) error
+	RemoveFromUser(ctx context.Context, tenantID, userID, roleID string) error
+	GetUserRoles(ctx context.Context, tenantID, userID string) ([]*domain.Role, error)
 }

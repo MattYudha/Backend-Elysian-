@@ -5,19 +5,20 @@ import (
 	"strconv"
 
 	"github.com/Elysian-Rebirth/backend-go/internal/domain"
+	"github.com/Elysian-Rebirth/backend-go/internal/domain/repository"
 	"github.com/Elysian-Rebirth/backend-go/internal/usecase/engine"
 	"github.com/gin-gonic/gin"
 )
 
 type ExecutionHandler struct {
-	engine *engine.Engine
+	engine *engine.WorkflowEngine
 	repo   domain.ExecutionRepository
-	wfRepo domain.WorkflowRepository
+	wfRepo repository.WorkflowRepository
 }
 
-func NewExecutionHandler(engine *engine.Engine, repo domain.ExecutionRepository, wfRepo domain.WorkflowRepository) *ExecutionHandler {
+func NewExecutionHandler(wfEngine *engine.WorkflowEngine, repo domain.ExecutionRepository, wfRepo repository.WorkflowRepository) *ExecutionHandler {
 	return &ExecutionHandler{
-		engine: engine,
+		engine: wfEngine,
 		repo:   repo,
 		wfRepo: wfRepo,
 	}
@@ -37,8 +38,7 @@ func (h *ExecutionHandler) Execute(c *gin.Context) {
 
 	// 2. Create Pending Execution Record
 	execution := &domain.Execution{
-		WorkflowID: workflow.ID,
-		UserID:     workflow.UserID, // Or current user if different
+		WorkflowID: workflow.ID.String(),
 		Status:     domain.ExecutionStatusPending,
 	}
 
@@ -47,15 +47,14 @@ func (h *ExecutionHandler) Execute(c *gin.Context) {
 		return
 	}
 
-	// 3. Start Async Engine
-	// Pass a copy or ensure thread safety if modifying workflow (here we just read)
-	h.engine.StartAsync(execution, workflow)
+	// 3. Trigger - note: full async execution managed by the DAG engine via /versions/:versionId/execute
+	// This legacy endpoint only creates the execution record and returns a pending status.
 
 	// 4. Return Immediately
 	c.JSON(http.StatusAccepted, gin.H{
 		"status":       "pending",
 		"execution_id": execution.ID,
-		"message":      "Workflow execution started",
+		"message":      "Execution record created. Trigger via /workflows/versions/{versionId}/execute for DAG execution.",
 	})
 }
 

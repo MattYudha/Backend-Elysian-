@@ -90,27 +90,26 @@ func (uc *authUseCase) Register(ctx context.Context, req RegisterRequest) (*Auth
 
 	user := &domain.User{
 		Email:        req.Email,
-		Name:         req.Name,
+		FullName:     req.Name,
 		PasswordHash: hashedPass,
-		IsActive:     true,
 	}
 
 	if err := uc.userRepo.Create(ctx, user); err != nil {
 		return nil, err
 	}
 
-	accessToken, err := uc.jwtSvc.GenerateAccessToken(user.ID, user.Email)
+	accessToken, err := uc.jwtSvc.GenerateAccessToken(user.ID.String(), user.Email)
 	if err != nil {
 		return nil, err
 	}
 
-	refreshToken, err := uc.jwtSvc.GenerateRefreshToken(user.ID)
+	refreshToken, err := uc.jwtSvc.GenerateRefreshToken(user.ID.String())
 	if err != nil {
 		return nil, err
 	}
 
 	refreshKey := uc.keyBuilder.RefreshToken(refreshToken)
-	if err := uc.cache.Set(ctx, refreshKey, user.ID, 7*time.Hour*24); err != nil {
+	if err := uc.cache.Set(ctx, refreshKey, user.ID.String(), 7*time.Hour*24); err != nil {
 		return nil, err
 	}
 
@@ -131,24 +130,18 @@ func (uc *authUseCase) Login(ctx context.Context, req LoginRequest) (*AuthRespon
 		return nil, err
 	}
 
-	accessToken, err := uc.jwtSvc.GenerateAccessToken(user.ID, user.Email)
+	accessToken, err := uc.jwtSvc.GenerateAccessToken(user.ID.String(), user.Email)
 	if err != nil {
 		return nil, err
 	}
 
-	refreshToken, err := uc.jwtSvc.GenerateRefreshToken(user.ID)
+	refreshToken, err := uc.jwtSvc.GenerateRefreshToken(user.ID.String())
 	if err != nil {
 		return nil, err
 	}
 
 	refreshKey := uc.keyBuilder.RefreshToken(refreshToken)
-	if err := uc.cache.Set(ctx, refreshKey, user.ID, 7*time.Hour*24); err != nil {
-		return nil, err
-	}
-
-	now := time.Now()
-	user.LastLoginAt = &now
-	if err := uc.userRepo.Update(ctx, user); err != nil {
+	if err := uc.cache.Set(ctx, refreshKey, user.ID.String(), 7*time.Hour*24); err != nil {
 		return nil, err
 	}
 
@@ -173,12 +166,12 @@ func (uc *authUseCase) RefreshToken(ctx context.Context, refreshToken string) (*
 		return nil, err
 	}
 
-	newAccessToken, err := uc.jwtSvc.GenerateAccessToken(user.ID, user.Email)
+	newAccessToken, err := uc.jwtSvc.GenerateAccessToken(user.ID.String(), user.Email)
 	if err != nil {
 		return nil, err
 	}
 
-	newRefreshToken, err := uc.jwtSvc.GenerateRefreshToken(user.ID)
+	newRefreshToken, err := uc.jwtSvc.GenerateRefreshToken(user.ID.String())
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +181,7 @@ func (uc *authUseCase) RefreshToken(ctx context.Context, refreshToken string) (*
 	}
 
 	newRefreshKey := uc.keyBuilder.RefreshToken(newRefreshToken)
-	if err := uc.cache.Set(ctx, newRefreshKey, user.ID, 7*time.Hour*24); err != nil {
+	if err := uc.cache.Set(ctx, newRefreshKey, user.ID.String(), 7*time.Hour*24); err != nil {
 		return nil, err
 	}
 

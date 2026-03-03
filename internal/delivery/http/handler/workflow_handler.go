@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
@@ -10,6 +9,7 @@ import (
 	"github.com/Elysian-Rebirth/backend-go/internal/middleware"
 	"github.com/Elysian-Rebirth/backend-go/internal/usecase/workflow"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 type WorkflowHandler struct {
@@ -27,7 +27,7 @@ func (h *WorkflowHandler) List(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 
-	workflows, total, err := h.useCase.List(c.Request.Context(), user.ID, limit, offset)
+	workflows, total, err := h.useCase.List(c.Request.Context(), user.ID.String(), limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 		return
@@ -53,7 +53,7 @@ func (h *WorkflowHandler) Create(c *gin.Context) {
 		return
 	}
 
-	wf, err := h.useCase.Create(c.Request.Context(), user.ID, req)
+	wf, err := h.useCase.Create(c.Request.Context(), user.ID.String(), req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 		return
@@ -72,52 +72,18 @@ func (h *WorkflowHandler) Get(c *gin.Context) {
 		return
 	}
 
-	// Prepare Graph DTO for Frontend
-	nodes := make([]dto.ReactFlowNodeDTO, 0)
-	edges := make([]dto.ReactFlowEdgeDTO, 0)
-
-	for _, n := range wf.Nodes {
-		var data map[string]interface{}
-		_ = json.Unmarshal(n.Configuration, &data)
-
-		nodes = append(nodes, dto.ReactFlowNodeDTO{
-			ID:   n.ID,
-			Type: n.NodeType,
-			Position: dto.ReactFlowPosition{
-				X: n.PositionX,
-				Y: n.PositionY,
-			},
-			Data: data,
-		})
-	}
-
-	for _, e := range wf.Edges {
-		var data map[string]interface{}
-		_ = json.Unmarshal(e.Configuration, &data)
-
-		edges = append(edges, dto.ReactFlowEdgeDTO{
-			ID:           e.EdgeKey, // ReactFlow expects its own ID key back
-			Source:       e.SourceNodeID,
-			Target:       e.TargetNodeID,
-			SourceHandle: e.SourceHandle,
-			TargetHandle: e.TargetHandle,
-			Type:         e.Type,
-			Animated:     e.Animated,
-			Data:         data,
-		})
-	}
-
+	// Stub responses until WorkflowVersion is connected to frontend DTO
 	response := dto.WorkflowResponse{
-		ID:          wf.ID,
+		ID:          wf.ID.String(),
 		Name:        wf.Name,
-		Description: *wf.Description,
+		Description: "",
 		Status:      string(wf.Status),
 		Graph: dto.ReactFlowGraphDTO{
-			Nodes: nodes,
-			Edges: edges,
+			Nodes: []dto.ReactFlowNodeDTO{},
+			Edges: []dto.ReactFlowEdgeDTO{},
 		},
 		CreatedAt: wf.CreatedAt.Format(time.RFC3339),
-		UpdatedAt: wf.UpdatedAt.Format(time.RFC3339),
+		UpdatedAt: wf.CreatedAt.Format(time.RFC3339),
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "data": response})
@@ -170,4 +136,38 @@ func (h *WorkflowHandler) Delete(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Workflow deleted"})
+}
+
+// Execute Pipeline (POST /workflows/versions/:versionId/execute)
+func (h *WorkflowHandler) ExecutePipeline(c *gin.Context) {
+	user := middleware.MustGetUserFromContext(c)
+	tenantID := middleware.MustGetTenantIDFromContext(c)
+
+	_ = user
+
+	versionIDStr := c.Param("versionId")
+	versionID, err := uuid.Parse(versionIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid version ID format"})
+		return
+	}
+
+	tid, err := uuid.Parse(tenantID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid tenant ID format"})
+		return
+	}
+
+	execCtx, err := h.useCase.ExecutePipeline(c.Request.Context(), tid, user.ID, versionID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	// For debugging/demo, return the full context payload
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": "DAG Pipeline executed successfully",
+		"context": execCtx.Payload,
+	})
 }

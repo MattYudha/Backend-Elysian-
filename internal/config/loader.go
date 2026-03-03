@@ -31,6 +31,12 @@ func Load() (*Config, error) {
 	v.AddConfigPath("./config")
 	v.AddConfigPath(".")
 
+	// set explicit safety defaults to prevent OOM in scaling environments
+	v.SetDefault("database.max_open_conns", 50)
+	v.SetDefault("database.max_idle_conns", 10)
+	v.SetDefault("database.conn_max_lifetime", "10m")
+	v.SetDefault("database.conn_max_idle_time", "5m")
+
 	// read default config
 	if err := v.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("failed to read default config: %w", err)
@@ -100,6 +106,9 @@ func overrideWithEnv(cfg *Config) {
 	if v := os.Getenv("DB_SSL_MODE"); v != "" {
 		cfg.Database.SSLMode = v
 	}
+	if v := os.Getenv("PG_BOUNCER_URL"); v != "" {
+		cfg.Database.PgBouncerURL = v
+	}
 
 	// Redis
 	if v := os.Getenv("REDIS_HOST"); v != "" {
@@ -166,6 +175,9 @@ func (c *Config) MaskSensitive() *Config {
 
 // GetDatabaseDSN returns the database connection string
 func (c *Config) GetDatabaseDSN() string {
+	if c.Database.PgBouncerURL != "" {
+		return c.Database.PgBouncerURL
+	}
 	return fmt.Sprintf(
 		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		c.Database.Host,

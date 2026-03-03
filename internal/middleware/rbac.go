@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -120,9 +121,11 @@ func RequirePermission(permissions ...string) gin.HandlerFunc {
 
 		userPermissions := make(map[string]bool)
 		for _, role := range userRoles {
-			perms := role.GetPermissions()
-			for _, perm := range perms {
-				userPermissions[perm] = true
+			var perms []string
+			if err := json.Unmarshal(role.Permissions, &perms); err == nil {
+				for _, perm := range perms {
+					userPermissions[perm] = true
+				}
 			}
 		}
 
@@ -186,7 +189,7 @@ func CheckOwnership(c *gin.Context, resourceUserID string) bool {
 		return false
 	}
 
-	return user.ID == resourceUserID
+	return user.ID.String() == resourceUserID
 }
 
 func MustCheckOwnership(c *gin.Context, resourceUserID string) {

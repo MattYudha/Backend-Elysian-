@@ -20,6 +20,9 @@ type AIConfig struct {
 	DeepSeekAPIKey string `mapstructure:"deepseek_api_key"`
 	OpenAIAPIKey   string `mapstructure:"openai_api_key"`
 	GeminiAPIKey   string `mapstructure:"gemini_api_key"`
+	// Document parsing pipeline (enterprise PDF extraction)
+	DoclingURL      string `mapstructure:"docling_url"`      // e.g. http://localhost:5001
+	UnstructuredURL string `mapstructure:"unstructured_url"` // fallback: http://localhost:8000
 }
 
 type ServerConfig struct {
@@ -39,6 +42,7 @@ type DatabaseConfig struct {
 	Password        string        `mapstructure:"password" validate:"required"`
 	Name            string        `mapstructure:"name" validate:"required"`
 	SSLMode         string        `mapstructure:"ssl_mode"`
+	PgBouncerURL    string        `mapstructure:"pgbouncer_url"` // Explicit parameter for architecture clarity
 	MaxOpenConns    int           `mapstructure:"max_open_conns" validate:"min=1"`
 	MaxIdleConns    int           `mapstructure:"max_idle_conns" validate:"min=1"`
 	ConnMaxLifetime time.Duration `mapstructure:"conn_max_lifetime"`

@@ -2,11 +2,17 @@ package workflow
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
+
+	"time"
 
 	"github.com/Elysian-Rebirth/backend-go/internal/delivery/http/dto"
 	"github.com/Elysian-Rebirth/backend-go/internal/domain"
-	"gorm.io/datatypes"
+	"github.com/Elysian-Rebirth/backend-go/internal/domain/repository"
+	"github.com/Elysian-Rebirth/backend-go/internal/usecase/engine"
+	"github.com/Elysian-Rebirth/backend-go/internal/usecase/engine/handlers"
+	"github.com/Elysian-Rebirth/backend-go/internal/usecase/engine/interceptors"
+	"github.com/google/uuid"
 )
 
 type WorkflowUseCase interface {
@@ -16,23 +22,30 @@ type WorkflowUseCase interface {
 	Update(ctx context.Context, id string, req dto.SaveWorkflowRequest) (*domain.Workflow, error)
 	Delete(ctx context.Context, id string) error
 	UpdateGraph(ctx context.Context, id string, req dto.SaveWorkflowGraphRequest) error
+	ExecutePipeline(ctx context.Context, tenantID uuid.UUID, userID uuid.UUID, versionID uuid.UUID) (*engine.ExecutionContext, error)
 }
 
 type workflowUseCase struct {
-	repo domain.WorkflowRepository
+	repo         repository.WorkflowRepository
+	docRepo      domain.DocumentRepository
+	auditRepo    domain.AuditRepository
+	geminiAPIKey string
 }
 
-func NewWorkflowUseCase(repo domain.WorkflowRepository) *workflowUseCase {
-	return &workflowUseCase{repo: repo}
+func NewWorkflowUseCase(repo repository.WorkflowRepository, docRepo domain.DocumentRepository, auditRepo domain.AuditRepository, geminiAPIKey string) *workflowUseCase {
+	return &workflowUseCase{
+		repo:         repo,
+		docRepo:      docRepo,
+		auditRepo:    auditRepo,
+		geminiAPIKey: geminiAPIKey,
+	}
 }
 
 func (uc *workflowUseCase) Create(ctx context.Context, userID string, req dto.SaveWorkflowRequest) (*domain.Workflow, error) {
 	workflow := &domain.Workflow{
-		UserID:      userID,
-		Name:        req.Name,
-		Description: &req.Description,
-		IsPublic:    req.IsPublic,
-		Status:      domain.WorkflowStatusDraft,
+		TenantID: uuid.Nil, // Must be correctly set by context later
+		Name:     req.Name,
+		Status:   "draft",
 	}
 
 	if err := uc.repo.Create(ctx, workflow); err != nil {
@@ -57,8 +70,6 @@ func (uc *workflowUseCase) Update(ctx context.Context, id string, req dto.SaveWo
 	}
 
 	workflow.Name = req.Name
-	workflow.Description = &req.Description
-	workflow.IsPublic = req.IsPublic
 
 	if err := uc.repo.Update(ctx, workflow); err != nil {
 		return nil, err
@@ -72,56 +83,68 @@ func (uc *workflowUseCase) Delete(ctx context.Context, id string) error {
 }
 
 func (uc *workflowUseCase) UpdateGraph(ctx context.Context, id string, req dto.SaveWorkflowGraphRequest) error {
-	var nodes []domain.WorkflowNode
-	var edges []domain.WorkflowEdge
-
-	// 1. Convert DTO Nodes to Domain
-	for _, n := range req.Nodes {
-		// Extract label from data if exists
-		label := ""
-		if l, ok := n.Data["label"].(string); ok {
-			label = l
-		}
-
-		// Serialize Data to JSON for DB
-		configJSON, err := json.Marshal(n.Data)
-		if err != nil {
-			configJSON = []byte("{}")
-		}
-
-		nodes = append(nodes, domain.WorkflowNode{
-			ID:            n.ID,
-			WorkflowID:    id,
-			NodeKey:       n.ID,
-			NodeType:      n.Type,
-			Label:         &label,
-			PositionX:     n.Position.X,
-			PositionY:     n.Position.Y,
-			Configuration: datatypes.JSON(configJSON),
-		})
-	}
-
-	// 2. Convert DTO Edges to Domain
-	for _, e := range req.Edges {
-		configJSON, err := json.Marshal(e.Data)
-		if err != nil {
-			configJSON = []byte("{}")
-		}
-
-		edges = append(edges, domain.WorkflowEdge{
-			ID:            e.ID,
-			WorkflowID:    id,
-			EdgeKey:       e.ID,
-			SourceNodeID:  e.Source,
-			TargetNodeID:  e.Target,
-			SourceHandle:  e.SourceHandle,
-			TargetHandle:  e.TargetHandle,
-			Type:          e.Type,
-			Animated:      e.Animated,
-			Configuration: datatypes.JSON(configJSON),
-		})
-	}
-
 	// 3. Call Repo Transaction
-	return uc.repo.UpdateGraph(ctx, id, nodes, edges)
+	return uc.repo.UpdateGraph(ctx, id, []byte{})
+}
+
+func (uc *workflowUseCase) ExecutePipeline(ctx context.Context, tenantID uuid.UUID, userID uuid.UUID, versionID uuid.UUID) (*engine.ExecutionContext, error) {
+	// 1. Ambil Workflow Version (JSONB) dari Database
+	version, err := uc.repo.GetVersionByID(ctx, versionID.String())
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. Parse JSON Configuration menjadi Graph
+	graph, err := engine.ParseWorkflow(version.Configuration)
+	if err != nil {
+		return nil, fmt.Errorf("gagal mem-parsing skema workflow: %w", err)
+	}
+
+	// 3. Catat di Database bahwa Pipeline mulai berjalan
+	pipeline := domain.Pipeline{
+		TenantID:          tenantID,
+		WorkflowVersionID: version.ID,
+		Name:              fmt.Sprintf("Execution-%d", time.Now().Unix()),
+		Status:            "running",
+	}
+	if err := uc.repo.CreatePipeline(ctx, &pipeline); err != nil {
+		return nil, err
+	}
+
+	// 4. Inisialisasi Engine & Daftarkan Handlers + Interceptors
+	workflowEngine := engine.NewWorkflowEngine()
+	workflowEngine.Register("llm_agent", handlers.NewLLMAgentHandler())
+
+	ragHandler, err := handlers.NewRAGRetrieverHandler(uc.docRepo, uc.geminiAPIKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to init RAG retriever: %w", err)
+	}
+	workflowEngine.Register("rag_retriever", ragHandler)
+
+	// Mount Telemetry and Forensic Audit Interceptors
+	workflowEngine.Use(interceptors.NewTelemetryInterceptor())
+	workflowEngine.Use(interceptors.NewForensicAuditInterceptor(uc.auditRepo))
+
+	// 5. Eksekusi DAG
+	execCtx, err := workflowEngine.Run(graph, map[string]interface{}{
+		"tenant_id": tenantID.String(),
+		"user_id":   userID.String(),
+	})
+
+	// 6. Finalisasi & Update Log Database (Wajib untuk Observabilitas)
+	duration := time.Since(pipeline.StartedAt).Milliseconds()
+	pipeline.ExecutionTimeMs = int(duration)
+	now := time.Now()
+	pipeline.CompletedAt = &now
+
+	if err != nil {
+		pipeline.Status = "failed"
+		uc.repo.UpdatePipeline(ctx, &pipeline) // Simpan status gagal
+		return nil, fmt.Errorf("eksekusi pipeline gagal: %w", err)
+	}
+
+	pipeline.Status = "success"
+	uc.repo.UpdatePipeline(ctx, &pipeline)
+
+	return execCtx, nil
 }

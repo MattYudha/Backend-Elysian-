@@ -146,14 +146,11 @@ func (h *UserHandler) GetMe(c *gin.Context) {
 	currentUser := middleware.MustGetUserFromContext(c)
 
 	// Fetch fresh user data with roles (Repository has Preload)
-	user, err := h.userRepo.FindByID(c.Request.Context(), currentUser.ID)
+	user, err := h.userRepo.FindByID(c.Request.Context(), currentUser.ID.String())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to fetch user profile"})
 		return
 	}
-
-	// Compute Role for Frontend
-	user.SetComputedRole()
 
 	c.JSON(http.StatusOK, gin.H{
 		"status": "success",
@@ -184,10 +181,10 @@ func (h *UserHandler) UpdateMe(c *gin.Context) {
 	}
 
 	if req.Name != "" {
-		user.Name = req.Name
+		user.FullName = req.Name
 	}
 	if req.AvatarURL != nil {
-		user.AvatarURL = req.AvatarURL
+		user.AvatarURL = *req.AvatarURL
 	}
 
 	if err := h.userRepo.Update(c.Request.Context(), user); err != nil {
@@ -198,10 +195,10 @@ func (h *UserHandler) UpdateMe(c *gin.Context) {
 	c.JSON(http.StatusOK, UpdateUserResponse{
 		Message: "Profile updated successfully",
 		User: UserResponse{
-			ID:        user.ID,
+			ID:        user.ID.String(),
 			Email:     user.Email,
-			Name:      user.Name,
-			AvatarURL: user.AvatarURL,
+			Name:      user.FullName,
+			AvatarURL: &user.AvatarURL,
 		},
 	})
 }
@@ -218,7 +215,7 @@ func (h *UserHandler) UpdateMe(c *gin.Context) {
 func (h *UserHandler) DeleteMe(c *gin.Context) {
 	user := middleware.MustGetUserFromContext(c)
 
-	if err := h.userRepo.Delete(c.Request.Context(), user.ID); err != nil {
+	if err := h.userRepo.Delete(c.Request.Context(), user.ID.String()); err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to delete account"})
 		return
 	}

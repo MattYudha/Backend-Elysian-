@@ -4,6 +4,7 @@ import (
 	"github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler"
 	"github.com/Elysian-Rebirth/backend-go/internal/middleware"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -15,6 +16,8 @@ func SetupRoutes(
 	authHandler *handler.AuthHandler,
 	workflowHandler *handler.WorkflowHandler,
 	executionHandler *handler.ExecutionHandler,
+	documentHandler *handler.DocumentHandler,
+	ragSearchHandler *handler.RAGSearchHandler,
 	authMiddleware gin.HandlerFunc,
 ) {
 	// Swagger
@@ -22,6 +25,9 @@ func SetupRoutes(
 
 	// Health check
 	router.GET("/health", healthHandler.Check)
+
+	// Prometheus Metrics Exporter
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	// API Root Group
 	api := router.Group("/api")
@@ -72,8 +78,11 @@ func SetupRoutes(
 				workflows.PUT("/:id/graph", workflowHandler.UpdateGraph) // Canonical Graph update
 				workflows.DELETE("/:id", workflowHandler.Delete)
 
-				// Execution Trigger
+				// Execution Trigger (legacy)
 				workflows.POST("/:id/execute", executionHandler.Execute)
+
+				// DAG Pipeline Execute (New Engine)
+				workflows.POST("/versions/:versionId/execute", workflowHandler.ExecutePipeline)
 			}
 
 			// Executions (Global or specific)
@@ -82,6 +91,16 @@ func SetupRoutes(
 			{
 				executions.GET("/:id", executionHandler.Get)
 				executions.GET("", executionHandler.List)
+			}
+
+			// Documents (Knowledge Base RAG)
+			docs := v1.Group("/documents")
+			docs.Use(authMiddleware)
+			{
+				docs.GET("/presign", documentHandler.Presign)        // Step 1: Get upload URL
+				docs.POST("/confirm", documentHandler.ConfirmUpload) // Step 2: Confirm upload
+				docs.GET("", documentHandler.List)                   // List all docs
+				docs.POST("/search", ragSearchHandler.Search)        // Hybrid RAG search (HNSW+FTS+RRF)
 			}
 		}
 	}

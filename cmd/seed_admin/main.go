@@ -28,7 +28,7 @@ func main() {
 
 	// 3. Define Admin User
 	const adminEmail = "admin@gmail.com"
-	const adminPasswordRaw = "admin"
+	const adminPasswordRaw = "admin12345"
 
 	// 4. Hash Password
 	passwordService := auth.NewPasswordService()
@@ -43,7 +43,7 @@ func main() {
 		var existingUser domain.User
 		result := tx.Where("email = ?", adminEmail).First(&existingUser)
 
-		var userID string
+		var userID uuid.UUID
 
 		if result.Error == nil {
 			// Update existing
@@ -56,13 +56,12 @@ func main() {
 		} else if result.Error == gorm.ErrRecordNotFound {
 			// Create new
 			log.Printf("Creating new admin user %s...", adminEmail)
-			userID = "usr_" + uuid.New().String() // Generating ID similar to known prefix if any, or UUID
+			userID = uuid.New()
 			newUser := domain.User{
 				ID:           userID,
-				Name:         "Super Admin",
+				FullName:     "Super Admin",
 				Email:        adminEmail,
 				PasswordHash: hashedPassword,
-				IsActive:     true,
 				CreatedAt:    time.Now(),
 				UpdatedAt:    time.Now(),
 			}
@@ -73,16 +72,30 @@ func main() {
 			return result.Error
 		}
 
-		// B. Ensure Role Exists
+		// B. Check/Create Default Tenant
+		var systemTenantID uuid.UUID
+		if err := tx.Raw("SELECT id FROM tenants WHERE name = 'System'").Scan(&systemTenantID).Error; err != nil && err != gorm.ErrRecordNotFound {
+			if systemTenantID == uuid.Nil {
+				systemTenantID = uuid.New()
+				if err := tx.Exec("INSERT INTO tenants (id, name, plan_tier) VALUES (?, 'System', 'enterprise')", systemTenantID).Error; err != nil {
+					return err
+				}
+			}
+		} else if systemTenantID == uuid.Nil {
+			systemTenantID = uuid.New()
+			if err := tx.Exec("INSERT INTO tenants (id, name, plan_tier) VALUES (?, 'System', 'enterprise')", systemTenantID).Error; err != nil {
+				return err
+			}
+		}
+
+		// C. Ensure Role Exists (System level)
 		var adminRole domain.Role
 		if err := tx.Where("name = ?", "admin").First(&adminRole).Error; err != nil {
 			if err == gorm.ErrRecordNotFound {
 				log.Println("Creating 'admin' role...")
-				desc := "Administrator with full access"
 				adminRole = domain.Role{
-					ID:          "role_" + uuid.New().String(),
-					Name:        "admin",
-					Description: &desc,
+					ID:   uuid.New(),
+					Name: "admin",
 				}
 				if err := tx.Create(&adminRole).Error; err != nil {
 					return err
@@ -92,16 +105,17 @@ func main() {
 			}
 		}
 
-		// C. Assign Role to User
-		var userRole domain.UserRole
-		if err := tx.Where("user_id = ? AND role_id = ?", userID, adminRole.ID).First(&userRole).Error; err != nil {
+		// D. Assign Role to User via TenantUser
+		var tenantUser domain.TenantUser
+		if err := tx.Where("tenant_id = ? AND user_id = ? AND role_id = ?", systemTenantID, userID, adminRole.ID).First(&tenantUser).Error; err != nil {
 			if err == gorm.ErrRecordNotFound {
-				log.Println("Assigning 'admin' role to user...")
-				userRole = domain.UserRole{
-					UserID: userID,
-					RoleID: adminRole.ID,
+				log.Println("Assigning 'admin' role to user in System tenant...")
+				tenantUser = domain.TenantUser{
+					TenantID: systemTenantID,
+					UserID:   userID,
+					RoleID:   &adminRole.ID,
 				}
-				if err := tx.Create(&userRole).Error; err != nil {
+				if err := tx.Create(&tenantUser).Error; err != nil {
 					return err
 				}
 			} else {

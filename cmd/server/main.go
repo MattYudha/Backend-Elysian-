@@ -18,10 +18,15 @@ import (
 	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/agent"
 	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/cache"
 	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/database"
+	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/mq"
+	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/parsing"
+	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/storage"
 	"github.com/Elysian-Rebirth/backend-go/internal/middleware"
 	postgresRepo "github.com/Elysian-Rebirth/backend-go/internal/repository/postgres"
 	"github.com/Elysian-Rebirth/backend-go/internal/usecase/auth"
+	documentUsecase "github.com/Elysian-Rebirth/backend-go/internal/usecase/document"
 	"github.com/Elysian-Rebirth/backend-go/internal/usecase/engine"
+	"github.com/Elysian-Rebirth/backend-go/internal/usecase/rag"
 	"github.com/Elysian-Rebirth/backend-go/internal/usecase/workflow"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -73,7 +78,7 @@ func main() {
 	log.Printf("Redis connectin established")
 
 	userRepo := postgresRepo.NewUserRepository(db)
-	roleRepo := postgresRepo.NewRoleRepository(db)
+	roleRepo := postgresRepo.NewRoleRepository(db, redisCache.(*cache.RedisCache).GetClient())
 	_ = roleRepo
 
 	log.Printf("Repositories initialized")
@@ -106,23 +111,65 @@ func main() {
 
 	// Workflow Components
 	workflowRepo := postgresRepo.NewWorkflowRepository(db)
-	workflowUseCase := workflow.NewWorkflowUseCase(workflowRepo)
+	docRepo := postgresRepo.NewDocumentRepository(db)
+	auditRepo := postgresRepo.NewAuditRepository(db)
+	workflowUseCase := workflow.NewWorkflowUseCase(workflowRepo, docRepo, auditRepo, cfg.AI.GeminiAPIKey)
 	workflowHandler := handler.NewWorkflowHandler(workflowUseCase)
 
 	// Infrastructure Components
 	agentFactory, err := agent.NewAgentFactory(context.Background(), cfg.AI.GeminiAPIKey, cfg.Redis.Host+":"+cfg.Redis.Port)
 	if err != nil {
-		log.Fatalf("Failed to initialize Agent Factory: %v", err)
+		log.Printf("[WARN] Agent Factory initialization failed (no Gemini API Key?): %v — DAG engine will run in mock mode", err)
+		agentFactory = nil
+	} else {
+		log.Printf("Agent Factory initialized")
 	}
 
 	// Execution Components
 	executionRepo := postgresRepo.NewExecutionRepository(db)
-	wfEngine := engine.NewEngine(executionRepo, agentFactory)
+	wfEngine := engine.NewWorkflowEngine()
 	executionHandler := handler.NewExecutionHandler(wfEngine, executionRepo, workflowRepo)
 
-	authMiddleware := middleware.AuthMiddleware(jwtSvc, userRepo, roleRepo)
+	// S3 Storage + Document Components
+	var documentHandler *handler.DocumentHandler
+	asynqClient := mq.NewAsynqClient(cfg)
 
-	routes.SetupRoutes(router, healthHandler, userHandler, authHandler, workflowHandler, executionHandler, authMiddleware)
+	s3Service, s3Err := storage.NewS3Service(&cfg.Storage)
+	if s3Err != nil {
+		log.Printf("[WARN] S3 not configured (%v) — document upload disabled", s3Err)
+	} else {
+		// Ensure the bucket exists on startup
+		if err := s3Service.EnsureBucket(context.Background()); err != nil {
+			log.Printf("[WARN] Could not ensure S3 bucket: %v", err)
+		}
+		// docRepo previously initialized above
+
+		// DocumentUsecase orchestrates presign → DB record → Asynq enqueue
+		docUsecase := documentUsecase.NewDocumentUsecase(docRepo, s3Service, asynqClient)
+		documentHandler = handler.NewDocumentHandler(docUsecase)
+
+		// Start Asynq Worker with Docling parser + Gemini key from config (never hardcoded)
+		asynqWorker := mq.NewAsynqWorker(cfg)
+		docParser := parsing.NewDocumentParser(cfg.AI.DoclingURL, cfg.AI.UnstructuredURL)
+		docTaskHandler := rag.NewDocumentTaskHandler(docRepo, s3Service, docParser, cfg.AI.GeminiAPIKey)
+		asynqWorker.RegisterHandler(rag.TypeProcessDocument, docTaskHandler.Handle)
+		go func() {
+			if err := asynqWorker.Start(); err != nil {
+				log.Printf("[WARN] Asynq Worker failed to start: %v", err)
+			}
+		}()
+		log.Printf("Asynq RAG Worker started (Gemini embedding enabled: %v)", cfg.AI.GeminiAPIKey != "")
+	}
+
+	authMiddleware := middleware.AuthMiddleware(jwtSvc, userRepo, roleRepo, redisCache.(*cache.RedisCache).GetClient())
+
+	// RAG Search Handler — uses the already-initialized docRepo and Gemini key from config
+	var ragSearchHandler *handler.RAGSearchHandler
+	if cfg.AI.GeminiAPIKey != "" {
+		ragSearchHandler = handler.NewRAGSearchHandler(postgresRepo.NewDocumentRepository(db), cfg.AI.GeminiAPIKey)
+	}
+
+	routes.SetupRoutes(router, healthHandler, userHandler, authHandler, workflowHandler, executionHandler, documentHandler, ragSearchHandler, authMiddleware)
 
 	addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
 	srv := &http.Server{
@@ -149,10 +196,12 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.GracefulShutdownTimeout)
 	defer cancel()
 
-	if err := agentFactory.Close(); err != nil {
-		log.Printf("Error closing AgentFactory: %v", err)
-	} else {
-		log.Printf("AgentFactory (GenAI) connections closed")
+	if agentFactory != nil {
+		if err := agentFactory.Close(); err != nil {
+			log.Printf("Error closing AgentFactory: %v", err)
+		} else {
+			log.Printf("AgentFactory (GenAI) connections closed")
+		}
 	}
 
 	if err := redisCache.Close(); err != nil {

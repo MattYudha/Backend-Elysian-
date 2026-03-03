@@ -30,8 +30,8 @@ type Execution struct {
 	CreatedAt  time.Time       `gorm:"autoCreateTime" json:"created_at"`
 
 	// Relations
-	Workflow Workflow       `gorm:"foreignKey:WorkflowID" json:"-"`
-	Logs     []ExecutionLog `gorm:"foreignKey:ExecutionID;constraint:OnDelete:CASCADE" json:"logs,omitempty"`
+	Workflow Workflow       `gorm:"-" json:"-"`
+	Logs     []ExecutionLog `gorm:"-" json:"logs,omitempty"`
 }
 
 type ExecutionLog struct {

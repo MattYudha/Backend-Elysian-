@@ -10,7 +10,6 @@ import (
 	"gorm.io/gorm/logger"
 
 	"github.com/Elysian-Rebirth/backend-go/internal/config"
-	"github.com/Elysian-Rebirth/backend-go/internal/domain"
 )
 
 // NewPostgresDB creates a new PostgreSQL database connection using GORM
@@ -57,19 +56,7 @@ func NewPostgresDB(cfg *config.Config) (*gorm.DB, error) {
 
 // NOTE: Only use this in development! Use goose migrations in production
 func AutoMigrate(db *gorm.DB) error {
-	log.Println("Running auto-migration...")
-
-	err := db.AutoMigrate(
-		&domain.User{},
-		&domain.Role{},
-		&domain.UserRole{},
-	)
-
-	if err != nil {
-		return fmt.Errorf("auto-migration failed: %w", err)
-	}
-
-	log.Println("Auto-migration completed")
+	log.Println("Auto-migration disabled. Using pure Goose DDL migrations instead.")
 	return nil
 }
 

@@ -1,0 +1,16 @@
+CONTAINER ID   IMAGE                     COMMAND                  CREATED              STATUS                              PORTS                                         NAMES
+09b85990d676   postgres:16               "docker-entrypoint.s…"   About a minute ago   Exited (0) Less than a second ago                                                 elysian_postgres
+8319693ce8b6   backend-go-toolbox        "/docker-entrypoint.…"   About a minute ago   Up 1 second                         80/tcp                                        elysian_toolbox
+0b17becddd09   redis:8-alpine            "docker-entrypoint.s…"   About a minute ago   Created                                                                           elysian_redis
+2d877a3bccd8   hello-world               "/hello"                 2 hours ago          Exited (0) 2 hours ago                                                            compassionate_merkle
+695b3fa86b53   frappe/erpnext:v15.82.0   "nginx-entrypoint.sh"    4 months ago         Up 1 second                         0.0.0.0:8080->8080/tcp, [::]:8080->8080/tcp   frappe_docker-frontend-1
+7632d44b788e   frappe/erpnext:v15.82.0   "bench worker --queu…"   4 months ago         Up 1 second                                                                       frappe_docker-queue-long-1
+bd4322f968d9   frappe/erpnext:v15.82.0   "bash -c 'ls -1 apps…"   4 months ago         Exited (0) 4 months ago                                                           frappe_docker-configurator-1
+75ccf08e4772   frappe/erpnext:v15.82.0   "/home/frappe/frappe…"   4 months ago         Exited (0) 2 months ago                                                           frappe_docker-backend-1
+8226249c0bab   mariadb:10.6              "docker-entrypoint.s…"   4 months ago         Exited (0) 2 months ago                                                           frappe_docker-db-1
+a1f6674d5a03   frappe/erpnext:v15.82.0   "bash -c 'wait-for-i…"   4 months ago         Exited (1) 4 months ago                                                           frappe_docker-create-site-1
+789f7cdf2347   redis:6.2-alpine          "docker-entrypoint.s…"   4 months ago         Exited (0) 2 months ago                                                           frappe_docker-redis-cache-1
+29eb488e4d20   redis:6.2-alpine          "docker-entrypoint.s…"   4 months ago         Exited (0) 2 months ago                                                           frappe_docker-redis-queue-1
+4b19b59e43e2   frappe/erpnext:v15.82.0   "bench worker --queu…"   4 months ago         Up 1 second                                                                       frappe_docker-queue-short-1
+4f59460ab494   frappe/erpnext:v15.82.0   "node /home/frappe/f…"   4 months ago         Up 1 second                                                                       frappe_docker-websocket-1
+e7e18a19427e   frappe/erpnext:v15.82.0   "bench schedule"         4 months ago         Up 1 second                                                                       frappe_docker-scheduler-1
