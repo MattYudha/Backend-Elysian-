@@ -1,10 +1,11 @@
 # ── Stage 1: Build ───────────────────────────────────────────────
-FROM golang:latest AS builder
+# golang:alpine tracks the latest stable Go on Alpine Linux (apk available)
+FROM golang:alpine AS builder
 
 # Git is needed by some go modules
 RUN apk add --no-cache git ca-certificates tzdata
 
-# Allow Go to auto-download the required toolchain version
+# Allow Go to auto-download the required toolchain version from go.mod
 ENV GOTOOLCHAIN=auto
 
 WORKDIR /app
@@ -27,8 +28,7 @@ WORKDIR /app
 # Copy compiled binary from builder stage
 COPY --from=builder /app/server .
 
-# Expose port (Railway injects $PORT at runtime)
+# Expose port
 EXPOSE 7777
 
-# Railway injects the PORT env variable; pass it through
 CMD ["./server"]
