@@ -1,0 +1,11 @@
+2026/03/04 13:25:35 No environment-specific config found for 'development', using defaults
+2026/03/04 13:25:35 Configuration loaded
+2026/03/04 13:25:35 Environment: development
+2026/03/04 13:25:35 Database connection established
+2026/03/04 13:25:35 Database is healthy
+redis: 2026/03/04 13:25:36 pool.go:419: redis: connection pool: failed to dial after 5 attempts: dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.
+redis: 2026/03/04 13:25:36 pool.go:419: redis: connection pool: failed to dial after 5 attempts: dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.
+redis: 2026/03/04 13:25:37 pool.go:419: redis: connection pool: failed to dial after 5 attempts: dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.
+redis: 2026/03/04 13:25:37 pool.go:419: redis: connection pool: failed to dial after 5 attempts: dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.
+2026/03/04 13:25:37 failed to connect to Redis: failed to connect to Redis: dial tcp [::1]:6379: connectex: No connection could be made because the target machine actively refused it.
+exit status 1

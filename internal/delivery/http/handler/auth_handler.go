@@ -55,7 +55,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	var req auth.RegisterRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid request body"})
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid request body: " + err.Error()})
 		return
 	}
 

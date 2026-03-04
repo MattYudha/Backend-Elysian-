@@ -20,14 +20,14 @@ type AuthUseCase interface {
 }
 
 type RegisterRequest struct {
-	Email    string
-	Password string
-	Name     string
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required,min=8"`
+	Name     string `json:"name" binding:"required"`
 }
 
 type LoginRequest struct {
-	Email    string
-	Password string
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required"`
 }
 
 type AuthResponse struct {

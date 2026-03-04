@@ -4,7 +4,7 @@
 -- 0. EKSTENSI WAJIB
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-CREATE EXTENSION IF NOT EXISTS "vector";
+-- CREATE EXTENSION IF NOT EXISTS "vector";
 
 -- ==========================================
 -- 1. IDENTITAS GLOBAL & SSO
@@ -77,12 +77,12 @@ CREATE TABLE document_chunks (
     tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
     document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
-    embedding vector(1536),
+    -- embedding vector(1536),
     chunk_index INTEGER NOT NULL
 );
 
 -- Indeks HNSW dengan pre-filtering tenant_id
-CREATE INDEX ON document_chunks USING hnsw (embedding vector_cosine_ops);
+-- CREATE INDEX ON document_chunks USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX idx_doc_chunks_tenant ON document_chunks(tenant_id);
 
 -- ==========================================

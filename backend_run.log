@@ -1,0 +1,122 @@
+2026/03/04 14:18:12 No environment-specific config found for 'development', using defaults
+2026/03/04 14:18:12 Configuration loaded
+2026/03/04 14:18:12 Environment: development
+2026/03/04 14:18:12 Database connection established
+2026/03/04 14:18:12 Database is healthy
+2026/03/04 14:18:12 Redis connectin established
+2026/03/04 14:18:12 Repositories initialized
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+2026/03/04 14:18:12 [WARN] Agent Factory initialization failed (no Gemini API Key?): failed to create GenAI client: You need an auth option to use this client.
+for an API Key: Visit https://ai.google.dev to get one, put it in an environment variable like GEMINI_API_KEY,
+then pass it as an option:
+    genai.NewClient(ctx, option.WithAPIKey(os.Getenv("GEMINI_API_KEY")))
+(If you're doing that already, then maybe the environment variable is empty or unset.)
+Import the option package as "google.golang.org/api/option". — DAG engine will run in mock mode
+2026/03/04 14:18:12 [WARN] S3 not configured (failed to initialize S3 client: Endpoint url cannot have fully qualified paths.) — document upload disabled
+[GIN-debug] GET    /swagger/*any             --> github.com/swaggo/gin-swagger.CustomWrapHandler.func1 (4 handlers)
+[GIN-debug] GET    /health                   --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*HealthHandler).Check-fm (4 handlers)
+[GIN-debug] GET    /metrics                  --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/routes.SetupRoutes.WrapH.func1 (4 handlers)
+[GIN-debug] GET    /api/v1/ping              --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*HealthHandler).Ping-fm (4 handlers)
+[GIN-debug] POST   /api/v1/auth/register     --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*AuthHandler).Register-fm (4 handlers)
+[GIN-debug] POST   /api/v1/auth/login        --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*AuthHandler).Login-fm (4 handlers)
+[GIN-debug] POST   /api/v1/auth/refresh      --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*AuthHandler).RefreshToken-fm (4 handlers)
+[GIN-debug] POST   /api/v1/auth/logout       --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*AuthHandler).Logout-fm (4 handlers)
+[GIN-debug] GET    /api/v1/users/:id         --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*UserHandler).GetByID-fm (4 handlers)
+[GIN-debug] GET    /api/v1/users/email/:email --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*UserHandler).GetByEmail-fm (4 handlers)
+[GIN-debug] GET    /api/v1/users/me          --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*UserHandler).GetMe-fm (5 handlers)
+[GIN-debug] PUT    /api/v1/users/me          --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*UserHandler).UpdateMe-fm (5 handlers)
+[GIN-debug] DELETE /api/v1/users/me          --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*UserHandler).DeleteMe-fm (5 handlers)
+[GIN-debug] GET    /api/v1/users             --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*UserHandler).List-fm (6 handlers)
+[GIN-debug] GET    /api/v1/workflows         --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*WorkflowHandler).List-fm (5 handlers)
+[GIN-debug] POST   /api/v1/workflows         --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*WorkflowHandler).Create-fm (5 handlers)
+[GIN-debug] GET    /api/v1/workflows/:id     --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*WorkflowHandler).Get-fm (5 handlers)
+[GIN-debug] PATCH  /api/v1/workflows/:id     --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*WorkflowHandler).Update-fm (5 handlers)
+[GIN-debug] PUT    /api/v1/workflows/:id/graph --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*WorkflowHandler).UpdateGraph-fm (5 handlers)
+[GIN-debug] DELETE /api/v1/workflows/:id     --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*WorkflowHandler).Delete-fm (5 handlers)
+[GIN-debug] POST   /api/v1/workflows/:id/execute --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*ExecutionHandler).Execute-fm (5 handlers)
+[GIN-debug] POST   /api/v1/workflows/versions/:versionId/execute --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*WorkflowHandler).ExecutePipeline-fm (5 handlers)
+[GIN-debug] GET    /api/v1/executions/:id    --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*ExecutionHandler).Get-fm (5 handlers)
+[GIN-debug] GET    /api/v1/executions        --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*ExecutionHandler).List-fm (5 handlers)
+[GIN-debug] GET    /api/v1/documents/presign --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*DocumentHandler).Presign-fm (5 handlers)
+[GIN-debug] POST   /api/v1/documents/confirm --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*DocumentHandler).ConfirmUpload-fm (5 handlers)
+[GIN-debug] GET    /api/v1/documents         --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*DocumentHandler).List-fm (5 handlers)
+[GIN-debug] POST   /api/v1/documents/search  --> github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler.(*RAGSearchHandler).Search-fm (5 handlers)
+2026/03/04 14:18:12 Server starting on 0.0.0.0:7777
+
+2026/03/04 14:19:46 [31;1mC:/Users/US3R/Frontend-Elysian-Rebirth/backend-go/internal/repository/postgres/user_repository.go:101 [35;1mERROR: relation "users" does not exist (SQLSTATE 42P01)
+[0m[33m[6.639ms] [34;1m[rows:0][0m SELECT count(*) FROM "users" WHERE email = 'testuser1@elysian.ai'
+2026/03/04 14:19:46 [POST] 400 | 6.6387ms | ::1 /api/v1/auth/register
+
+2026/03/04 14:20:33 [31;1mC:/Users/US3R/Frontend-Elysian-Rebirth/backend-go/internal/repository/postgres/user_repository.go:101 [35;1mERROR: relation "users" does not exist (SQLSTATE 42P01)
+[0m[33m[0.637ms] [34;1m[rows:0][0m SELECT count(*) FROM "users" WHERE email = 'testuser2@elysian.ai'
+2026/03/04 14:20:33 [POST] 400 | 19.4353ms | ::1 /api/v1/auth/register
+2026/03/04 14:21:29 [POST] 400 | 0s | ::1 /api/v1/auth/register
+
+2026/03/04 14:28:58 [32mC:/Users/US3R/Frontend-Elysian-Rebirth/backend-go/internal/repository/postgres/user_repository.go:101
+[0m[33m[28.528ms] [34;1m[rows:1][0m SELECT count(*) FROM "users" WHERE email = 'testuser7@elysian.ai'
+
+2026/03/04 14:28:58 [32mC:/Users/US3R/Frontend-Elysian-Rebirth/backend-go/internal/repository/postgres/user_repository.go:22
+[0m[33m[34.254ms] [34;1m[rows:1][0m INSERT INTO "users" ("email","full_name","avatar_url","password_hash","created_at","updated_at") VALUES ('testuser7@elysian.ai','Test User','','$2a$12$VpHVxeUrTfASdDU9j8Ion.pzZv3RbMesnJe3v5.yjNulYFM2jPN.q','2026-03-04 07:28:58.883','2026-03-04 07:28:58.883') RETURNING "id"
+2026/03/04 14:28:58 [POST] 201 | 281.906ms | ::1 /api/v1/auth/register
+
+2026/03/04 14:32:19 [32mC:/Users/US3R/Frontend-Elysian-Rebirth/backend-go/internal/repository/postgres/user_repository.go:101
+[0m[33m[1.089ms] [34;1m[rows:1][0m SELECT count(*) FROM "users" WHERE email = 'dewarahmat123345@gmail.com'
+
+2026/03/04 14:32:19 [32mC:/Users/US3R/Frontend-Elysian-Rebirth/backend-go/internal/repository/postgres/user_repository.go:22
+[0m[33m[13.727ms] [34;1m[rows:1][0m INSERT INTO "users" ("email","full_name","avatar_url","password_hash","created_at","updated_at") VALUES ('dewarahmat123345@gmail.com','matt yudi','','$2a$12$q4l2S8R0Q1SIs.d0KoHKpuj.PtG02jfVJqs1vOHSRgOK9.A59F0S.','2026-03-04 07:32:19.405','2026-03-04 07:32:19.405') RETURNING "id"
+2026/03/04 14:32:19 [POST] 201 | 229.0429ms | ::1 /api/v1/auth/register
+2026/03/04 14:32:31 [OPTIONS] 204 | 0s | ::1 /api/v1/auth/login
+
+2026/03/04 14:32:31 [32mC:/Users/US3R/Frontend-Elysian-Rebirth/backend-go/internal/repository/postgres/user_repository.go:44
+[0m[33m[1.024ms] [34;1m[rows:1][0m SELECT * FROM "users" WHERE email = 'dewarahmat123345@gmail.com' ORDER BY "users"."id" LIMIT 1
+2026/03/04 14:32:31 [POST] 200 | 214.6484ms | ::1 /api/v1/auth/login
+
+2026/03/04 14:41:32 [32mC:/Users/US3R/Frontend-Elysian-Rebirth/backend-go/internal/repository/postgres/user_repository.go:44
+[0m[33m[33.962ms] [34;1m[rows:1][0m SELECT * FROM "users" WHERE email = 'dewarahmat123345@gmail.com' ORDER BY "users"."id" LIMIT 1
+2026/03/04 14:41:32 [POST] 200 | 283.0516ms | ::1 /api/v1/auth/login
+
+2026/03/04 14:41:42 [32mC:/Users/US3R/Frontend-Elysian-Rebirth/backend-go/internal/repository/postgres/user_repository.go:30
+[0m[33m[1.678ms] [34;1m[rows:1][0m SELECT * FROM "users" WHERE id = 'c92f79b0-2518-48c6-8d01-ade3a807290c' ORDER BY "users"."id" LIMIT 1
+2026/03/04 14:41:42 [POST] 200 | 38.437ms | ::1 /api/v1/auth/refresh
+2026/03/04 14:44:27 [POST] 401 | 26.4776ms | ::1 /api/v1/auth/refresh
+
+2026/03/04 14:47:07 [32mC:/Users/US3R/Frontend-Elysian-Rebirth/backend-go/internal/repository/postgres/user_repository.go:44
+[0m[33m[50.648ms] [34;1m[rows:1][0m SELECT * FROM "users" WHERE email = 'dewarahmat123345@gmail.com' ORDER BY "users"."id" LIMIT 1
+2026/03/04 14:47:08 [POST] 200 | 303.0862ms | ::1 /api/v1/auth/login
+
+2026/03/04 14:47:09 [32mC:/Users/US3R/Frontend-Elysian-Rebirth/backend-go/internal/repository/postgres/user_repository.go:30
+[0m[33m[0.704ms] [34;1m[rows:1][0m SELECT * FROM "users" WHERE id = 'c92f79b0-2518-48c6-8d01-ade3a807290c' ORDER BY "users"."id" LIMIT 1
+2026/03/04 14:47:09 [POST] 200 | 53.4596ms | ::1 /api/v1/auth/refresh
+2026/03/04 14:48:09 [POST] 401 | 8.0478ms | ::1 /api/v1/auth/refresh
+
+2026/03/04 14:48:18 [32mC:/Users/US3R/Frontend-Elysian-Rebirth/backend-go/internal/repository/postgres/user_repository.go:44
+[0m[33m[0.656ms] [34;1m[rows:1][0m SELECT * FROM "users" WHERE email = 'dewarahmat123345@gmail.com' ORDER BY "users"."id" LIMIT 1
+2026/03/04 14:48:18 [POST] 200 | 217.5093ms | ::1 /api/v1/auth/login
+
+2026/03/04 14:48:22 [32mC:/Users/US3R/Frontend-Elysian-Rebirth/backend-go/internal/repository/postgres/user_repository.go:30
+[0m[33m[3.171ms] [34;1m[rows:1][0m SELECT * FROM "users" WHERE id = 'c92f79b0-2518-48c6-8d01-ade3a807290c' ORDER BY "users"."id" LIMIT 1
+2026/03/04 14:48:22 [POST] 200 | 19.1972ms | ::1 /api/v1/auth/refresh
+2026/03/04 14:54:24 [POST] 401 | 13.1658ms | ::1 /api/v1/auth/refresh
+
+2026/03/04 14:54:32 [32mC:/Users/US3R/Frontend-Elysian-Rebirth/backend-go/internal/repository/postgres/user_repository.go:44
+[0m[33m[38.009ms] [34;1m[rows:1][0m SELECT * FROM "users" WHERE email = 'dewarahmat123345@gmail.com' ORDER BY "users"."id" LIMIT 1
+2026/03/04 14:54:32 [POST] 200 | 310.0523ms | ::1 /api/v1/auth/login
+
+2026/03/04 14:54:42 [32mC:/Users/US3R/Frontend-Elysian-Rebirth/backend-go/internal/repository/postgres/user_repository.go:44
+[0m[33m[0.726ms] [34;1m[rows:1][0m SELECT * FROM "users" WHERE email = 'dewarahmat123345@gmail.com' ORDER BY "users"."id" LIMIT 1
+2026/03/04 14:54:42 [POST] 200 | 267.5356ms | ::1 /api/v1/auth/login
+
+2026/03/04 14:55:04 [32mC:/Users/US3R/Frontend-Elysian-Rebirth/backend-go/internal/repository/postgres/user_repository.go:44
+[0m[33m[0.769ms] [34;1m[rows:1][0m SELECT * FROM "users" WHERE email = 'dewarahmat123345@gmail.com' ORDER BY "users"."id" LIMIT 1
+2026/03/04 14:55:05 [POST] 200 | 237.2984ms | ::1 /api/v1/auth/login
+
+2026/03/04 14:55:06 [32mC:/Users/US3R/Frontend-Elysian-Rebirth/backend-go/internal/repository/postgres/user_repository.go:30
+[0m[33m[1.615ms] [34;1m[rows:1][0m SELECT * FROM "users" WHERE id = 'c92f79b0-2518-48c6-8d01-ade3a807290c' ORDER BY "users"."id" LIMIT 1
+2026/03/04 14:55:06 [POST] 200 | 6.006ms | ::1 /api/v1/auth/refresh
+2026/03/04 14:55:35 [OPTIONS] 204 | 0s | ::1 /api/v1/users/me
+2026/03/04 14:55:35 [PUT] 401 | 42.3833ms | ::1 /api/v1/users/me
+2026/03/04 14:55:42 [PUT] 401 | 0s | ::1 /api/v1/users/me
+2026/03/04 14:55:56 [PUT] 401 | 0s | ::1 /api/v1/users/me

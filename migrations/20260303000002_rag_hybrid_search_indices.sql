@@ -20,9 +20,9 @@ CREATE INDEX IF NOT EXISTS idx_chunks_fts
 -- 3. HNSW index for pgvector approximate nearest-neighbor semantic search.
 --    m=16, ef_construction=64 is a good trade-off for 1536-dim embeddings.
 --    ef_search is tuned per-session at query time (see repository layer).
-CREATE INDEX IF NOT EXISTS idx_chunks_hnsw_embedding
-    ON document_chunks USING hnsw (embedding vector_cosine_ops)
-    WITH (m = 16, ef_construction = 64);
+-- CREATE INDEX IF NOT EXISTS idx_chunks_hnsw_embedding
+--     ON document_chunks USING hnsw (embedding vector_cosine_ops)
+--     WITH (m = 16, ef_construction = 64);
 
 -- 4. Composite B-Tree index for tenant-scoped pre-filtering
 --    (always filter by tenant_id BEFORE touching the HNSW index)
