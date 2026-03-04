@@ -1,5 +1,5 @@
 # ── Stage 1: Build ───────────────────────────────────────────────
-# golang:alpine tracks the latest stable Go on Alpine Linux (apk available)
+# golang:alpine is Alpine-based (apk available) and tracks latest stable Go
 FROM golang:alpine AS builder
 
 # Git is needed by some go modules
@@ -27,6 +27,9 @@ WORKDIR /app
 
 # Copy compiled binary from builder stage
 COPY --from=builder /app/server .
+
+# Copy config directory so Viper can find config.yml at runtime
+COPY --from=builder /app/config ./config
 
 # Expose port
 EXPOSE 7777
