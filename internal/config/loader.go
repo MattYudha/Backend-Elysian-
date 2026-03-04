@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log"
+	"net/url"
 	"os"
 	"strings"
 
@@ -115,10 +116,17 @@ func overrideWithEnv(cfg *Config) {
 	}
 
 	// REDIS_URL takes priority — Railway Redis provides this automatically
-	if v := os.Getenv("REDIS_URL"); v != "" {
-		// REDIS_URL format: redis://:password@host:port
-		// Parse it into host/port/password
-		cfg.Redis.Host = v // store full URL; GetRedisDSN handles it
+	// Format: redis://:password@host:port or redis://default:password@host:port
+	if redisURL := os.Getenv("REDIS_URL"); redisURL != "" {
+		if u, err := url.Parse(redisURL); err == nil {
+			cfg.Redis.Host = u.Hostname()
+			if port := u.Port(); port != "" {
+				cfg.Redis.Port = port
+			}
+			if pass, ok := u.User.Password(); ok {
+				cfg.Redis.Password = pass
+			}
+		}
 	} else {
 		// Individual Redis fields
 		if v := os.Getenv("REDIS_HOST"); v != "" {
