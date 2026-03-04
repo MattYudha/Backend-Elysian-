@@ -1,8 +1,11 @@
 # ── Stage 1: Build ───────────────────────────────────────────────
-FROM golang:1.22-alpine AS builder
+FROM golang:latest AS builder
 
 # Git is needed by some go modules
 RUN apk add --no-cache git ca-certificates tzdata
+
+# Allow Go to auto-download the required toolchain version
+ENV GOTOOLCHAIN=auto
 
 WORKDIR /app
 
