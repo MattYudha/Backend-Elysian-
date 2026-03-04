@@ -87,7 +87,14 @@ func overrideWithEnv(cfg *Config) {
 		cfg.Server.Environment = v
 	}
 
-	// Database
+	// DATABASE_URL takes priority — Railway Postgres provides this automatically
+	if v := os.Getenv("DATABASE_URL"); v != "" {
+		cfg.Database.PgBouncerURL = v
+	} else if v := os.Getenv("PG_BOUNCER_URL"); v != "" {
+		cfg.Database.PgBouncerURL = v
+	}
+
+	// Individual DB fields (used when DATABASE_URL is not set)
 	if v := os.Getenv("DB_HOST"); v != "" {
 		cfg.Database.Host = v
 	}
@@ -106,19 +113,23 @@ func overrideWithEnv(cfg *Config) {
 	if v := os.Getenv("DB_SSL_MODE"); v != "" {
 		cfg.Database.SSLMode = v
 	}
-	if v := os.Getenv("PG_BOUNCER_URL"); v != "" {
-		cfg.Database.PgBouncerURL = v
-	}
 
-	// Redis
-	if v := os.Getenv("REDIS_HOST"); v != "" {
-		cfg.Redis.Host = v
-	}
-	if v := os.Getenv("REDIS_PORT"); v != "" {
-		cfg.Redis.Port = v
-	}
-	if v := os.Getenv("REDIS_PASSWORD"); v != "" {
-		cfg.Redis.Password = v
+	// REDIS_URL takes priority — Railway Redis provides this automatically
+	if v := os.Getenv("REDIS_URL"); v != "" {
+		// REDIS_URL format: redis://:password@host:port
+		// Parse it into host/port/password
+		cfg.Redis.Host = v // store full URL; GetRedisDSN handles it
+	} else {
+		// Individual Redis fields
+		if v := os.Getenv("REDIS_HOST"); v != "" {
+			cfg.Redis.Host = v
+		}
+		if v := os.Getenv("REDIS_PORT"); v != "" {
+			cfg.Redis.Port = v
+		}
+		if v := os.Getenv("REDIS_PASSWORD"); v != "" {
+			cfg.Redis.Password = v
+		}
 	}
 
 	// JWT
