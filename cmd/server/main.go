@@ -15,6 +15,8 @@ import (
 	"github.com/Elysian-Rebirth/backend-go/internal/config"
 	"github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler"
 	"github.com/Elysian-Rebirth/backend-go/internal/delivery/http/routes"
+	"github.com/Elysian-Rebirth/backend-go/migrations"
+	"github.com/pressly/goose/v3"
 
 	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/agent"
 	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/cache"
@@ -71,6 +73,23 @@ func main() {
 		log.Fatalf("Database health check failed: %v", err)
 	}
 	log.Printf("Database is healthy")
+
+	// Run Goose Migrations automatically
+	sqlDB, err := db.DB()
+	if err == nil {
+		goose.SetBaseFS(migrations.EmbedMigrations)
+
+		if err := goose.SetDialect("postgres"); err != nil {
+			log.Fatalf("Goose set dialect failed: %v", err)
+		}
+
+		if err := goose.Up(sqlDB, "."); err != nil {
+			log.Fatalf("Goose up failed: %v", err)
+		}
+		log.Printf("Database migrations applied successfully")
+	} else {
+		log.Fatalf("Failed to get DB instance for goose: %v", err)
+	}
 
 	redisCache, err := cache.NewRedisCache(cfg)
 	if err != nil {
