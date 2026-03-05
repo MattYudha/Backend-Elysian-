@@ -88,6 +88,21 @@ func overrideWithEnv(cfg *Config) {
 		cfg.Server.Environment = v
 	}
 
+	// CORS — override via env vars so Railway Variables take precedence over cached config files
+	// CORS_ALLOWED_ORIGINS is comma-separated, e.g. "https://elysian.vercel.app,https://app.elysian.id"
+	if v := os.Getenv("CORS_ALLOWED_ORIGINS"); v != "" {
+		cfg.Security.CORSAllowedOrigins = strings.Split(v, ",")
+	}
+	if v := os.Getenv("CORS_ALLOWED_METHODS"); v != "" {
+		cfg.Security.CORSAllowedMethods = strings.Split(v, ",")
+	}
+	if v := os.Getenv("CORS_ALLOWED_HEADERS"); v != "" {
+		cfg.Security.CORSAllowedHeaders = strings.Split(v, ",")
+	}
+	if v := os.Getenv("CORS_ALLOW_CREDENTIALS"); v != "" {
+		cfg.Security.CORSAllowCredentials = v == "true"
+	}
+
 	// DATABASE_URL takes priority — Railway Postgres provides this automatically
 	if v := os.Getenv("DATABASE_URL"); v != "" {
 		cfg.Database.PgBouncerURL = v
