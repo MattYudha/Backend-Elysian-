@@ -15,8 +15,8 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 # Cache bust: increment this when you need a full rebuild
-# v4 - force rebuild for CORS fix (config.yml updated with Vercel origins)
-ARG CACHEBUST=4
+# v5 - force rebuild: CORS hardcoded in main.go
+ARG CACHEBUST=5
 
 # Copy source and build
 COPY . .

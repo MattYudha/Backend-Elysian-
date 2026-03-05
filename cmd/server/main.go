@@ -90,10 +90,40 @@ func main() {
 	router := gin.New()
 	router.Use(middleware.Recovery())
 	router.Use(middleware.Logger())
+
+	// CORS: merge config-based origins with hardcoded production origins
+	// This guarantees CORS works even if config files are cached by Docker
+	corsOrigins := cfg.Security.CORSAllowedOrigins
+	productionOrigins := []string{
+		"https://elysian.vercel.app",
+		"https://elysian-platform.vercel.app",
+	}
+	for _, po := range productionOrigins {
+		found := false
+		for _, co := range corsOrigins {
+			if co == po {
+				found = true
+				break
+			}
+		}
+		if !found {
+			corsOrigins = append(corsOrigins, po)
+		}
+	}
+	corsMethods := cfg.Security.CORSAllowedMethods
+	if len(corsMethods) == 0 {
+		corsMethods = []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"}
+	}
+	corsHeaders := cfg.Security.CORSAllowedHeaders
+	if len(corsHeaders) == 0 {
+		corsHeaders = []string{"Content-Type", "Authorization", "X-Requested-With"}
+	}
+	log.Printf("CORS allowed origins: %v", corsOrigins)
+
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     cfg.Security.CORSAllowedOrigins,
-		AllowMethods:     cfg.Security.CORSAllowedMethods,
-		AllowHeaders:     cfg.Security.CORSAllowedHeaders,
+		AllowOrigins:     corsOrigins,
+		AllowMethods:     corsMethods,
+		AllowHeaders:     corsHeaders,
 		ExposeHeaders:    []string{"Content-Length", "Authorization"},
 		AllowCredentials: cfg.Security.CORSAllowCredentials,
 		MaxAge:           12 * time.Hour,
