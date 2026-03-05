@@ -15,6 +15,21 @@ redis:
 security:
   rate_limit_requests_per_minute: 100
   rate_limit_burst: 20
+  cors_allowed_origins:
+    - "https://elysian.vercel.app"
+    - "https://*.vercel.app"
+  cors_allowed_methods:
+    - "GET"
+    - "POST"
+    - "PUT"
+    - "DELETE"
+    - "PATCH"
+    - "OPTIONS"
+  cors_allowed_headers:
+    - "Content-Type"
+    - "Authorization"
+    - "X-Requested-With"
+  cors_allow_credentials: true
 
 logging:
   level: "info"

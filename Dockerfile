@@ -31,7 +31,7 @@ COPY --from=builder /app/server .
 # Copy config directory so Viper can find config.yml at runtime
 COPY --from=builder /app/config ./config
 
-# Expose port
-EXPOSE 7777
+# Expose port (must match server.port in config.yml / PORT env var)
+EXPOSE 8080
 
 CMD ["./server"]
