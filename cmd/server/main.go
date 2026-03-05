@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -92,43 +93,35 @@ func main() {
 	router.Use(middleware.Recovery())
 	router.Use(middleware.Logger())
 
-	// CORS: merge config-based origins with hardcoded production origins
-	// This guarantees CORS works even if config files are cached by Docker
-	corsOrigins := cfg.Security.CORSAllowedOrigins
-	productionOrigins := []string{
-		"https://elysian.vercel.app",
-		"https://elysian-platform.vercel.app",
-	}
-	for _, po := range productionOrigins {
-		found := false
-		for _, co := range corsOrigins {
-			if co == po {
-				found = true
-				break
-			}
-		}
-		if !found {
-			corsOrigins = append(corsOrigins, po)
-		}
-	}
-	corsMethods := cfg.Security.CORSAllowedMethods
-	if len(corsMethods) == 0 {
-		corsMethods = []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"}
-	}
-	corsHeaders := cfg.Security.CORSAllowedHeaders
-	if len(corsHeaders) == 0 {
-		corsHeaders = []string{"Content-Type", "Authorization", "X-Requested-With"}
-	}
-	log.Printf("CORS allowed origins: %v", corsOrigins)
-
+	// CORS: use AllowOriginFunc for maximum flexibility and reliability.
+	// AllowOriginFunc + AllowCredentials: true is the most robust approach.
+	// This is compiled into the binary and cannot be broken by Docker cache.
+	configOrigins := cfg.Security.CORSAllowedOrigins
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     corsOrigins,
-		AllowMethods:     corsMethods,
-		AllowHeaders:     corsHeaders,
+		AllowOriginFunc: func(origin string) bool {
+			// Always allow localhost for development
+			if strings.HasPrefix(origin, "http://localhost") || strings.HasPrefix(origin, "http://127.0.0.1") {
+				return true
+			}
+			// Always allow all Vercel preview and production deployments
+			if strings.HasSuffix(origin, ".vercel.app") {
+				return true
+			}
+			// Allow config-based origins (from config.yml)
+			for _, o := range configOrigins {
+				if o == origin {
+					return true
+				}
+			}
+			return false
+		},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Requested-With", "Accept"},
 		ExposeHeaders:    []string{"Content-Length", "Authorization"},
-		AllowCredentials: cfg.Security.CORSAllowCredentials,
+		AllowCredentials: true, // hardcoded — required for login session
 		MaxAge:           12 * time.Hour,
 	}))
+	log.Printf("CORS configured: AllowOriginFunc=*.vercel.app + localhost + %d config origins, AllowCredentials=true", len(configOrigins))
 
 	passwordSvc := auth.NewPasswordService()
 	jwtSvc := auth.NewJWTService(cfg.JWT)
