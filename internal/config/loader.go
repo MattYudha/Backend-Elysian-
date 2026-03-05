@@ -20,10 +20,23 @@ func Load() (*Config, error) {
 		log.Println("No .env file found, using environment variables and config files")
 	}
 
-	env := os.Getenv("ENV")
+	// Determine environment: check multiple sources since 'ENV' keyword
+	// conflicts with Docker/Railway internals.
+	// Priority: APP_ENV > ENV > RAILWAY_ENVIRONMENT_NAME > RAILWAY_ENVIRONMENT > "development"
+	env := os.Getenv("APP_ENV")
+	if env == "" {
+		env = os.Getenv("ENV")
+	}
+	if env == "" {
+		env = os.Getenv("RAILWAY_ENVIRONMENT_NAME") // Automatically set by Railway
+	}
+	if env == "" {
+		env = os.Getenv("RAILWAY_ENVIRONMENT") // Alternative Railway var
+	}
 	if env == "" {
 		env = "development"
 	}
+	log.Printf("Detected environment: %s", env)
 
 	// setup Viper
 	v := viper.New()
@@ -43,10 +56,20 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to read default config: %w", err)
 	}
 
+	// Map environment name to config file suffix
+	// e.g. "production" -> config.prod.yml, "development" -> config.dev.yml
+	configSuffix := env
+	switch env {
+	case "production":
+		configSuffix = "prod"
+	case "development":
+		configSuffix = "dev"
+	}
+
 	// merge environment-specific config
-	v.SetConfigName(fmt.Sprintf("config.%s", env))
+	v.SetConfigName(fmt.Sprintf("config.%s", configSuffix))
 	if err := v.MergeInConfig(); err != nil {
-		log.Printf("No environment-specific config found for '%s', using defaults", env)
+		log.Printf("No environment-specific config found for '%s' (file: config.%s.yml), using defaults", env, configSuffix)
 	}
 
 	// enable environment variable override
@@ -84,7 +107,14 @@ func overrideWithEnv(cfg *Config) {
 	if v := os.Getenv("HOST"); v != "" {
 		cfg.Server.Host = v
 	}
-	if v := os.Getenv("ENV"); v != "" {
+	// APP_ENV takes priority over ENV (ENV conflicts with Docker keyword)
+	if v := os.Getenv("APP_ENV"); v != "" {
+		cfg.Server.Environment = v
+	} else if v := os.Getenv("ENV"); v != "" {
+		cfg.Server.Environment = v
+	} else if v := os.Getenv("RAILWAY_ENVIRONMENT_NAME"); v != "" {
+		cfg.Server.Environment = v
+	} else if v := os.Getenv("RAILWAY_ENVIRONMENT"); v != "" {
 		cfg.Server.Environment = v
 	}
 

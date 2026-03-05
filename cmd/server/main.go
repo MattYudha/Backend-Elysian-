@@ -83,7 +83,8 @@ func main() {
 
 	log.Printf("Repositories initialized")
 
-	if cfg.IsProduction() {
+	// Set GIN mode: respect GIN_MODE env var directly, or fall back to IsProduction
+	if os.Getenv("GIN_MODE") == "release" || cfg.IsProduction() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
