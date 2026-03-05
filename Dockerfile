@@ -14,6 +14,10 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 
+# Cache bust: increment this when you need a full rebuild
+# v4 - force rebuild for CORS fix (config.yml updated with Vercel origins)
+ARG CACHEBUST=4
+
 # Copy source and build
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o server ./cmd/server/main.go
@@ -31,7 +35,7 @@ COPY --from=builder /app/server .
 # Copy config directory so Viper can find config.yml at runtime
 COPY --from=builder /app/config ./config
 
-# Expose port (must match server.port in config.yml / PORT env var)
-EXPOSE 8080
+# Expose port (must match PORT env var set in Railway Variables)
+EXPOSE 7777
 
 CMD ["./server"]

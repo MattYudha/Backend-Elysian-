@@ -57,15 +57,19 @@ security:
   cors_allowed_origins:
     - "http://localhost:3000"
     - "http://localhost:8081"
+    - "https://elysian.vercel.app"
+    - "https://*.vercel.app"
   cors_allowed_methods:
     - "GET"
     - "POST"
     - "PUT"
     - "DELETE"
     - "PATCH"
+    - "OPTIONS"
   cors_allowed_headers:
     - "Content-Type"
     - "Authorization"
+    - "X-Requested-With"
   cors_allow_credentials: true
 
 logging:
