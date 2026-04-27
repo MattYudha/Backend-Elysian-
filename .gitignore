@@ -1,34 +1,65 @@
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
-# Binaries for programs and plugins
+# ─── Binaries ────────────────────────────────────────────────────
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
 bin/
+tmp_server
 
-# Test binary, built with `go test -c`
+# ─── Test Artifacts ──────────────────────────────────────────────
 *.test
-postman/
-
-# Code coverage profiles and other test artifacts
 *.out
 coverage.*
 *.coverprofile
 profile.cov
 
-# Dependency directories (remove the comment below to include it)
+# ─── Logs ────────────────────────────────────────────────────────
+*.log
+
+# ─── Debug & Error Dumps ────────────────────────────────────────
+build_error*.txt
+error_output.txt
+goose_err*.txt
+goose_error*.txt
+seed_error*.txt
+server_error.txt
+pg_logs.txt
+ps.txt
+test_output.txt
+backend_response.json
+test_seed.sql
+
+# ─── Environment Variables ───────────────────────────────────────
+.env
+.env.local
+.env.production
+
+# ─── Dependency Directories ─────────────────────────────────────
 # vendor/
 
-# Go workspace file
+# ─── Go Workspace ───────────────────────────────────────────────
 go.work
 go.work.sum
 
-# env file
-.env
+# ─── Temporary Files ────────────────────────────────────────────
+tmp/
+*.tmp
+*.swp
+*.swo
+*~
 
-# Editor/IDE
-# .idea/
-# .vscode/
+# ─── Editor / IDE ───────────────────────────────────────────────
+.idea/
+.vscode/
+*.iml
+
+# ─── OS Files ───────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── Postman ────────────────────────────────────────────────────
+postman/
+
+# ─── Cleanup Script ─────────────────────────────────────────────
+cleanup.bat
