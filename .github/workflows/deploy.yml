@@ -1,0 +1,36 @@
+name: Deploy to Biznet VPS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script: |
+            # Masuk ke direktori project Anda
+            # Kami berasumsi folder berada di root user (~/)
+            cd ~/Backend-Elysian- || cd ~/backend || echo "Directory not found, please check path"
+            
+            # Update kode terbaru dari GitHub
+            git pull origin main
+            
+            # Restart container menggunakan Docker Compose
+            # Menambah --build agar perubahan kode Go (compiled) ikut diperbarui
+            docker-compose down
+            docker-compose up -d --build
+            
+            # Bersihkan image lama agar disk VPS tidak penuh
+            docker image prune -f
