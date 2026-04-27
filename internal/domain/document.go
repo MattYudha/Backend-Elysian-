@@ -13,6 +13,7 @@ type Document struct {
 	TenantID       uuid.UUID      `gorm:"type:uuid;not null;index" json:"tenant_id"`
 	UserID         uuid.UUID      `gorm:"type:uuid;not null" json:"user_id"`
 	Title          string         `gorm:"type:varchar(255);not null" json:"title"`
+	Category       string         `gorm:"type:varchar(50);default:'general'" json:"category"`
 	SourceURI      string         `gorm:"type:text" json:"source_uri"`                      // S3 Key
 	Status         string         `gorm:"type:varchar(50);default:'pending'" json:"status"` // pending, processing, ready, failed
 	AiAnalysisJSON datatypes.JSON `gorm:"type:jsonb;default:'{}'" json:"ai_analysis_json"`
@@ -27,6 +28,8 @@ type DocumentChunk struct {
 	Content    string    `gorm:"type:text;not null" json:"content"`
 	Embedding  []float32 `gorm:"type:vector(1536)" json:"-"` // pgvector integration
 	ChunkIndex int       `gorm:"not null" json:"chunk_index"`
+	PageNumber int       `gorm:"not null;default:1" json:"page_number"`
+	Category   string    `gorm:"type:varchar(50);default:'general'" json:"category"`
 }
 
 // DocumentRepository defines persistence operations for documents.
@@ -48,6 +51,7 @@ type HybridSearchParams struct {
 	TopK           int       // Number of final results after RRF fusion
 	EfSearch       int       // HNSW ef_search parameter (higher = more accurate, slower)
 	RRFConstant    int       // RRF constant k (default 60, per the original paper)
+	Category       string    // Optional Metadata filter field (e.g. "POJK", "PBI")
 }
 
 // HybridSearchResult is a single fused result with lineage back to its source chunk and document.
@@ -64,6 +68,6 @@ type HybridSearchResult struct {
 // DocumentUsecase defines business logic for document lifecycle.
 type DocumentUsecase interface {
 	GetUploadURL(ctx context.Context, tenantID, userID uuid.UUID, fileName string) (presignedURL string, objectKey string, err error)
-	ConfirmUpload(ctx context.Context, tenantID, userID uuid.UUID, title, objectKey string) (*Document, error)
+	ConfirmUpload(ctx context.Context, tenantID, userID uuid.UUID, title, objectKey string, category string) (*Document, error)
 	ListDocuments(ctx context.Context, tenantID string, limit, offset int) ([]*Document, int64, error)
 }

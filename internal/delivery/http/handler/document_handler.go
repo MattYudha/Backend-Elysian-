@@ -63,13 +63,14 @@ func (h *DocumentHandler) Presign(c *gin.Context) {
 // @Accept       json
 // @Produce      json
 // @Param        request body ConfirmUploadRequest true "Confirm Upload Request"
-// @Success      201  {object}  map[string]interface{}
+// @Success      202  {object}  map[string]interface{}
 // @Failure      400  {object}  ErrorResponse
 // @Security     BearerAuth
 // @Router       /api/v1/documents/confirm [post]
 type ConfirmUploadRequest struct {
 	Title     string `json:"title" binding:"required"`
 	ObjectKey string `json:"object_key" binding:"required"`
+	Category  string `json:"category" binding:"required"`
 }
 
 func (h *DocumentHandler) ConfirmUpload(c *gin.Context) {
@@ -88,13 +89,13 @@ func (h *DocumentHandler) ConfirmUpload(c *gin.Context) {
 		return
 	}
 
-	doc, err := h.usecase.ConfirmUpload(c.Request.Context(), tenantID, user.ID, req.Title, req.ObjectKey)
+	doc, err := h.usecase.ConfirmUpload(c.Request.Context(), tenantID, user.ID, req.Title, req.ObjectKey, req.Category)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{
+	c.JSON(http.StatusAccepted, gin.H{
 		"status":      "success",
 		"document_id": doc.ID,
 		"message":     "Document accepted for processing. Vectorization queued.",

@@ -26,16 +26,18 @@ type ProcessDocumentPayload struct {
 	DocumentID string `json:"document_id"`
 	TenantID   string `json:"tenant_id"`
 	S3URI      string `json:"s3_uri"`
+	Category   string `json:"category"`
 }
 
 // NewProcessDocumentTask creates an Asynq task pinned to the heavy_parsing queue.
 // The heavy_parsing queue is limited to concurrency=2 in the server config to
 // prevent Docling OOM when multiple large PDFs are uploaded simultaneously.
-func NewProcessDocumentTask(documentID, tenantID, s3URI string) (*asynq.Task, error) {
+func NewProcessDocumentTask(documentID, tenantID, s3URI string, category string) (*asynq.Task, error) {
 	payload, err := json.Marshal(ProcessDocumentPayload{
 		DocumentID: documentID,
 		TenantID:   tenantID,
 		S3URI:      s3URI,
+		Category:   category,
 	})
 	if err != nil {
 		return nil, err
@@ -141,12 +143,17 @@ func (h *DocumentTaskHandler) Handle(ctx context.Context, t *asynq.Task) error {
 	// TenantID on every chunk is mandatory for pgvector pre-filtering.
 	var docChunks []domain.DocumentChunk
 	for i, mdChunk := range mdChunks {
+		// Mock PageNumber mapping (assuming ~3 chunks per literal page of A4 text)
+		approxPageNum := (i / 3) + 1
+
 		docChunks = append(docChunks, domain.DocumentChunk{
 			TenantID:   tenantID,
 			DocumentID: docID,
 			Content:    mdChunk.FullContent, // store with context prefix
 			Embedding:  embeddings[i],
 			ChunkIndex: mdChunk.Index,
+			PageNumber: approxPageNum,
+			Category:   payload.Category,
 		})
 	}
 

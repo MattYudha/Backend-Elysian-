@@ -28,6 +28,7 @@ type SearchRequest struct {
 	TopK        int    `json:"top_k"`
 	EfSearch    int    `json:"ef_search"`
 	RRFConstant int    `json:"rrf_constant"`
+	Category    string `json:"category"`
 }
 
 // Search godoc
@@ -79,6 +80,7 @@ func (h *RAGSearchHandler) Search(c *gin.Context) {
 
 	// Step 2: Hybrid Search at the repository layer.
 	// Tenant pre-filtering is enforced INSIDE the SQL query — not just in Go.
+	// We also inject the category filter (metadata_filter) for Hackathon SupTech precision.
 	results, err := h.docRepo.HybridSearch(c.Request.Context(), domain.HybridSearchParams{
 		TenantID:       tenantID,
 		QueryText:      req.Query,
@@ -86,6 +88,7 @@ func (h *RAGSearchHandler) Search(c *gin.Context) {
 		TopK:           topK,
 		EfSearch:       efSearch,
 		RRFConstant:    rrfConstant,
+		Category:       req.Category, // metadata filter
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Hybrid search failed: " + err.Error()})

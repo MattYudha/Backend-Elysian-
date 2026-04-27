@@ -35,11 +35,12 @@ func (u *documentUsecase) GetUploadURL(ctx context.Context, tenantID, userID uui
 
 // ConfirmUpload (Step 3: POST /confirm)
 // Creates the DB record and dispatches the vectorization task to Asynq.
-func (u *documentUsecase) ConfirmUpload(ctx context.Context, tenantID, userID uuid.UUID, title, objectKey string) (*domain.Document, error) {
+func (u *documentUsecase) ConfirmUpload(ctx context.Context, tenantID, userID uuid.UUID, title, objectKey string, category string) (*domain.Document, error) {
 	doc := &domain.Document{
 		TenantID:  tenantID,
 		UserID:    userID,
 		Title:     title,
+		Category:  category,
 		SourceURI: objectKey,
 		Status:    "pending",
 	}
@@ -50,7 +51,7 @@ func (u *documentUsecase) ConfirmUpload(ctx context.Context, tenantID, userID uu
 	}
 
 	// 2. Enqueue vectorization task (non-blocking)
-	task, err := rag.NewProcessDocumentTask(doc.ID.String(), tenantID.String(), objectKey)
+	task, err := rag.NewProcessDocumentTask(doc.ID.String(), tenantID.String(), objectKey, category)
 	if err != nil {
 		// Mark as failed but return the document ID so frontend can retry
 		_ = u.repo.UpdateStatus(ctx, doc.ID, "queued_failed", nil)
