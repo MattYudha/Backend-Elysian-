@@ -30,6 +30,7 @@ import (
 	documentUsecase "github.com/Elysian-Rebirth/backend-go/internal/usecase/document"
 	"github.com/Elysian-Rebirth/backend-go/internal/usecase/engine"
 	"github.com/Elysian-Rebirth/backend-go/internal/usecase/rag"
+	"github.com/Elysian-Rebirth/backend-go/internal/usecase/swarm"
 	"github.com/Elysian-Rebirth/backend-go/internal/usecase/workflow"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -212,7 +213,12 @@ func main() {
 		ragSearchHandler = handler.NewRAGSearchHandler(postgresRepo.NewDocumentRepository(db), cfg.AI.GeminiAPIKey)
 	}
 
-	routes.SetupRoutes(router, healthHandler, userHandler, authHandler, workflowHandler, executionHandler, documentHandler, ragSearchHandler, authMiddleware)
+	// Swarm Components
+	swarmRepo := postgresRepo.NewSwarmRepository(db)
+	swarmUsecase := swarm.NewSwarmUsecase(swarmRepo, redisCache)
+	swarmHandler := handler.NewSwarmHandler(swarmUsecase, redisCache)
+
+	routes.SetupRoutes(router, healthHandler, userHandler, authHandler, workflowHandler, executionHandler, documentHandler, ragSearchHandler, swarmHandler, authMiddleware)
 
 	addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
 	srv := &http.Server{

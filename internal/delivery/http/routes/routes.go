@@ -18,6 +18,7 @@ func SetupRoutes(
 	executionHandler *handler.ExecutionHandler,
 	documentHandler *handler.DocumentHandler,
 	ragSearchHandler *handler.RAGSearchHandler,
+	swarmHandler *handler.SwarmHandler,
 	authMiddleware gin.HandlerFunc,
 ) {
 	// Swagger
@@ -101,6 +102,22 @@ func SetupRoutes(
 				docs.POST("/confirm", documentHandler.ConfirmUpload) // Step 2: Confirm upload
 				docs.GET("", documentHandler.List)                   // List all docs
 				docs.POST("/search", ragSearchHandler.Search)        // Hybrid RAG search (HNSW+FTS+RRF)
+			}
+
+			// Swarm Integrations
+			swarm := v1.Group("/swarm")
+			{
+				// Internal callback does not use authMiddleware
+				swarm.POST("/callback", swarmHandler.Callback)
+				
+				// SSE Endpoint (auth might be needed depending on implementation, but kept open for hackathon or handled via token in query)
+				swarm.GET("/events", swarmHandler.StreamEvents)
+				
+				protectedSwarm := swarm.Group("")
+				protectedSwarm.Use(authMiddleware)
+				{
+					protectedSwarm.POST("/upload", swarmHandler.Trigger)
+				}
 			}
 		}
 	}
