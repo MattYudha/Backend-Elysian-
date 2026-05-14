@@ -3,253 +3,212 @@
   <img src="https://img.shields.io/badge/Gin-Framework-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Gin"/>
   <img src="https://img.shields.io/badge/PostgreSQL-16-316192?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL"/>
   <img src="https://img.shields.io/badge/Redis-8-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis"/>
-  <img src="https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker"/>
+  <img src="https://img.shields.io/badge/Blockchain-Sepolia-3C3C3D?style=for-the-badge&logo=ethereum&logoColor=white" alt="Blockchain"/>
+  <img src="https://img.shields.io/badge/Solidity-0.8.28-363636?style=for-the-badge&logo=solidity&logoColor=white" alt="Solidity"/>
 </p>
 
-# ⚡ Elysian Backend
+# ⚡ Elysian Rebirth — Backend v3.0
 
-A high-performance Go-based REST API server for **AI-powered workflow automation** — built with Clean Architecture principles, featuring document intelligence, RAG-based search, and multi-tenant execution engine.
+> **Go Backend untuk Infrastruktur Audit Finansial Otonom berbasis Multi-Agent Swarm Intelligence + Blockchain Audit Trail**
 
 ---
 
-## 🏗️ Tech Stack
+## 🎯 Apa itu Elysian?
+
+**Elysian Rebirth** mendeteksi **markup anggaran** pada tahap perencanaan (Pre-Audit) di Pemerintah Daerah Indonesia menggunakan:
+- 🤖 **Multi-Agent Swarm** (Auditor → Compliance → Manager)
+- 🔗 **Blockchain Audit Trail** (Immutable hash storage)
+- 📊 **Real-time SSE Streaming** (Live debate logs)
+
+---
+
+## 🏗️ Architecture v3.0
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  Elysian Backend (Go / Gin) — The Orchestrator & Interface                 │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                │
+│  │ HTTP Server  │◄──►│ Swarm        │◄──►│ Blockchain   │                │
+│  │ · Auth       │    │   Usecase    │    │   Service    │                │
+│  │ · Documents  │    │ · Trigger    │    │ · InsertLog  │                │
+│  │ · RAG Search │    │ · Callback   │    │ · VerifyHash │                │
+│  │ · Workflows  │    │ · SSE Stream │    │ · WaitConf   │                │
+│  └──────┬───────┘    └──────┬───────┘    └──────┬───────┘                │
+│         │                   │                   │                          │
+│    ┌────▼────┐         ┌────▼────┐         ┌────▼────┐                   │
+│    │PostgreSQL│         │  Redis  │         │ Sepolia │                   │
+│    │· IAM    │         │· Queue  │         │ Testnet │                   │
+│    │· Docs   │         │· PubSub │         │· Audit  │                   │
+│    │· Swarm  │         │· Cache  │         │  Trail  │                   │
+│    └─────────┘         └─────────┘         └─────────┘                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Blockchain Integration Flow:
+```
+Python Worker Callback
+    ↓
+Go HandleCallback()
+    ↓
+Save hashes to DB → Publish SSE to FE
+    ↓
+Spawn Goroutine → InsertLog() to Sepolia
+    ↓
+Wait Confirmation → Update DB: VERIFIED
+```
+
+---
+
+## 🛠️ Tech Stack
 
 | Layer | Technology |
-|---|---|
+|-------|-----------|
 | **Language** | Go 1.25.5 |
 | **Framework** | Gin (HTTP) + GORM (ORM) |
 | **Database** | PostgreSQL 16 with pgvector |
-| **Cache** | Redis 8 |
-| **Message Queue** | Asynq (Redis-backed) |
-| **Object Storage** | MinIO (S3-compatible) |
-| **AI Integration** | Google Gemini AI + Agent SDK |
-| **Auth** | JWT (Access + Refresh tokens) |
-| **Monitoring** | Prometheus + OpenTelemetry |
+| **Cache/Queue** | Redis 8 (go-redis + Asynq) |
+| **Blockchain** | go-ethereum v1.15.11 |
+| **Smart Contract** | Solidity 0.8.28 (Hardhat) |
+| **Auth** | JWT (RS256) + Argon2id + HTTP-Only Cookies |
+| **Migration** | Goose (embedded) |
 | **Docs** | Swagger/OpenAPI |
-| **Deployment** | Docker + Docker Compose |
+| **Monitoring** | Prometheus metrics |
 
 ---
 
 ## 📁 Project Structure
 
 ```
-Backend-Elysian-/
+be/
 ├── cmd/
-│   ├── server/              # Application entrypoint (main.go)
-│   └── seed_admin/          # Admin seeder CLI tool
+│   ├── server/              # Entry point (main.go)
+│   └── seed_admin/          # Admin seeder CLI
 ├── config/
-│   ├── config.yml           # Development configuration
-│   ├── config.dev.yml       # Dev overrides
-│   └── config.prod.yml      # Production overrides
-├── docs/
-│   ├── architecture/        # Architecture documentation
-│   ├── docs.go              # Swagger generated docs
-│   ├── swagger.json
-│   └── swagger.yaml
+│   ├── config.yml           # Main config (blockchain enabled)
+│   └── config.dev.yml       # Development overrides
 ├── internal/
-│   ├── config/              # Config loader & validator
-│   ├── delivery/
-│   │   └── http/
-│   │       ├── dto/         # Data Transfer Objects
-│   │       ├── handler/     # HTTP handlers (auth, workflow, document, RAG, etc.)
-│   │       └── routes/      # Route definitions
-│   ├── domain/              # Domain entities (user, workflow, document, execution, etc.)
-│   │   └── repository/      # Repository interfaces
-│   ├── infrastructure/
-│   │   ├── agent/           # AI Agent SDK integration
-│   │   ├── ai/              # Google Gemini AI service
-│   │   ├── cache/           # Redis cache layer
-│   │   ├── database/        # Database connection & pooling
-│   │   ├── mq/              # Message queue (Asynq)
-│   │   ├── parsing/         # Document parsing engine
-│   │   ├── storage/         # MinIO object storage
-│   │   └── telemetry/       # Prometheus + OpenTelemetry
-│   ├── middleware/           # Auth, RBAC, Logger, Recovery
-│   ├── repository/
-│   │   └── postgres/        # PostgreSQL implementations
-│   └── usecase/             # Business logic (auth, document, engine, RAG, workflow)
-├── migrations/              # SQL migrations (goose)
-├── toolbox/                 # DevOps monitoring dashboard
-├── .env.example             # Environment template
-├── .env.production.example  # Production env template
-├── Dockerfile               # Multi-stage Docker build
-├── docker-compose.yml       # Development services
-├── docker-compose.prod.yml  # Production deployment
-├── Makefile                 # Build & task automation
-├── railway.toml             # Railway deployment config
-├── go.mod
-└── go.sum
+│   ├── config/              # Config loader + blockchain config
+│   ├── domain/              # Entities (SwarmTask, User, Document)
+│   ├── delivery/http/       # Handlers + Routes
+│   ├── usecase/             # Business logic
+│   │   ├── auth/            # Auth + JWT + Argon2id
+│   │   ├── swarm/           # Swarm trigger + callback + blockchain
+│   │   ├── document/        # Document + RAG
+│   │   └── workflow/        # Workflow engine
+│   ├── repository/postgres/ # DB implementations
+│   ├── infrastructure/      # External services
+│   │   ├── blockchain/      # 🔗 go-ethereum AuditTrail binding
+│   │   ├── cache/           # Redis client
+│   │   ├── database/        # PostgreSQL connection
+│   │   └── mq/              # Asynq queue
+│   └── middleware/          # Auth, RBAC, Logger, Recovery
+├── migrations/              # Goose SQL migrations
+├── docs/                    # Swagger docs
+└── README.md                # This file
+```
+
+---
+
+## 🔗 Blockchain Service
+
+### Contract: AuditTrail.sol
+
+| Function | Description |
+|----------|-------------|
+| `insertLog(taskId, rationaleHash, consensusHash)` | Simpan hash ke blockchain |
+| `correctLog(oldTaskId, ...)` | Revisi hash (supersede) |
+| `getActiveLog(taskId)` | Ambil log terbaru |
+| `verifyHashes(taskId, ...)` | Verifikasi hash match |
+
+### Deployment:
+| Network | Sepolia Testnet |
+|---------|----------------|
+| Chain ID | 11155111 |
+| Contract | `0x50d7A710C1a06b15Ee61669007279E03E4B2f233` |
+| Deployer | `0x03252339418744A98F03D4ED979dF36Cd75308D4` |
+
+### Config (`config.yml`):
+```yaml
+blockchain:
+  enabled: true
+  rpc_url: "https://eth-sepolia.g.alchemy.com/v2/YphaD1AyIb34KtIp9xpXD"
+  contract_addr: "0x50d7A710C1a06b15Ee61669007279E03E4B2f233"
+  private_key: "0x..."
+  network: "sepolia"
 ```
 
 ---
 
 ## 🚀 Quick Start
 
-### Prerequisites
-
-- Go 1.25.5+
-- Docker & Docker Compose
-- Make (optional, recommended)
-
-### 1. Clone & Setup
-
 ```bash
-git clone https://github.com/MattYudha/Backend-Elysian-.git
-cd Backend-Elysian-
-cp .env.example .env
-```
+# 1. Setup PostgreSQL + Redis
+# PostgreSQL: localhost:5432 (trust auth for dev)
+# Redis: localhost:6379
 
-### 2. Start Infrastructure
+# 2. Install dependencies
+go mod tidy
 
-```bash
-# Start PostgreSQL, Redis, MinIO, and Toolbox
-make docker-up
-```
+# 3. Setup config
+cp config/config.yml config/config.dev.yml
+# Edit config.yml with your settings
 
-### 3. Run Database Migrations
+# 4. Run migrations (auto on startup)
+go run cmd/server/main.go
 
-```bash
-make migrate-up
-```
-
-### 4. Seed Admin User
-
-```bash
-go run cmd/seed_admin/main.go
-```
-
-### 5. Run the Server
-
-```bash
-make run
-```
-
-The API will be available at **`http://localhost:7777`**
-
----
-
-## 📋 Available Commands
-
-```bash
-make help             # Show all available commands
-make run              # Run the application
-make build            # Build binary to bin/server
-make test             # Run all tests
-make clean            # Clean build artifacts
-make swagger          # Generate Swagger docs
-make docker-up        # Start Docker services
-make docker-down      # Stop Docker services
-make docker-logs      # View Docker logs
-make migrate-up       # Run database migrations
-make migrate-down     # Rollback last migration
-make migrate-status   # Check migration status
-make migrate-reset    # Reset all migrations
-make migrate-create NAME=xxx  # Create new migration
+# 5. Server starts on
+http://localhost:7777
 ```
 
 ---
 
-## 🔌 API Endpoints
+## 📡 API Endpoints
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/health` | Health check |
-| `POST` | `/api/v1/auth/register` | Register user |
-| `POST` | `/api/v1/auth/login` | Login (returns JWT) |
-| `POST` | `/api/v1/auth/refresh` | Refresh access token |
-| `GET` | `/api/v1/workflows` | List workflows |
-| `POST` | `/api/v1/workflows` | Create workflow |
-| `POST` | `/api/v1/executions` | Execute workflow |
-| `POST` | `/api/v1/documents` | Upload document |
-| `GET` | `/api/v1/rag/search` | RAG-powered search |
-| `GET` | `/api/v1/users` | User management |
-| `GET` | `/swagger/*` | Swagger UI |
+### Auth:
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/v1/auth/register` | Public | Register user |
+| POST | `/api/v1/auth/login` | Public | Login + set cookies |
+| POST | `/api/v1/auth/refresh` | Public | Refresh token |
+| POST | `/api/v1/auth/logout` | Public | Clear cookies |
 
-> Full API documentation available at `http://localhost:7777/swagger/index.html`
+### Swarm:
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/v1/swarm/upload` | Bearer | Trigger Swarm Review |
+| POST | `/api/v1/swarm/callback` | Internal | Python worker callback |
+| GET | `/api/v1/swarm/events` | Open | SSE streaming |
 
----
-
-## 🏛️ Architecture
-
-This project follows **Clean Architecture** with clear separation of concerns:
-
-```
-┌─────────────────────────────────────────────────────┐
-│                   Delivery (HTTP)                    │
-│          Handlers → DTOs → Routes                    │
-├─────────────────────────────────────────────────────┤
-│                   Use Cases                          │
-│     Auth · Workflow · Document · Engine · RAG        │
-├─────────────────────────────────────────────────────┤
-│                    Domain                            │
-│   Entities · Repository Interfaces · Value Objects   │
-├─────────────────────────────────────────────────────┤
-│                Infrastructure                        │
-│  Database · Cache · MQ · AI · Storage · Telemetry    │
-└─────────────────────────────────────────────────────┘
-```
-
-**Key Patterns:**
-- **Repository Pattern** — data access abstracted through interfaces
-- **Dependency Injection** — all dependencies injected at startup
-- **Middleware Chain** — Auth → RBAC → Logger → Recovery
-- **Multi-tenant** — tenant isolation via UUID-based scoping
+### Documents:
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/v1/documents/presign` | Bearer | Presigned S3 URL |
+| POST | `/api/v1/documents/confirm` | Bearer | Confirm upload |
+| POST | `/api/v1/documents/search` | Bearer | Hybrid RAG Search |
 
 ---
 
-## 🐳 Docker Deployment
+## 🔐 Security
 
-### Development
-
-```bash
-docker-compose up -d
-```
-
-### Production
-
-```bash
-docker-compose -f docker-compose.prod.yml up -d --build
-```
-
-Services included:
-- **PostgreSQL 16** (pgvector) — vector search enabled
-- **Redis 8** — caching & message queue
-- **MinIO** — S3-compatible object storage
-- **App** — Go backend server (production only)
+- **Password Hashing:** Argon2id (memory=64MB, iterations=3, parallelism=4)
+- **JWT:** RS256 asymmetric, 15min access / 30day refresh
+- **Cookies:** HttpOnly, Secure, SameSite=Strict
+- **Rate Limiting:** Auth endpoints rate-limited per IP
+- **Blockchain:** Private key never exposed to client
 
 ---
 
-## 🔐 Security Features
+## 🏛️ Elysian Ecosystem
 
-- **JWT Authentication** — access + refresh token rotation
-- **RBAC Middleware** — role-based access control per endpoint
-- **CORS Configuration** — configurable allowed origins
-- **Rate Limiting** — request throttling per IP
-- **Input Validation** — structured validation on all endpoints
-- **SQL Injection Prevention** — parameterized queries via GORM
-
----
-
-## 📊 Monitoring & Observability
-
-- **Prometheus Metrics** — endpoint at `/metrics`
-- **OpenTelemetry Tracing** — distributed tracing support
-- **Health Check** — endpoint at `/health` with dependency status
-- **Structured Logging** — JSON-formatted logs in production
+| Repo | Role | Stack |
+|------|------|-------|
+| [Frontend](https://github.com/MattYudha/Frontend-Elysian-Rebirth) | Next.js 14 UI | TypeScript + Tailwind |
+| [Backend](https://github.com/MattYudha/Backend-Elysian-) | Go API Server | Go + Gin + PostgreSQL |
+| [ML](https://github.com/MattYudha/ML-ELYSIAN) | Python Swarm | Flask + OpenAI |
+| [Trust Layer](https://github.com/MattYudha/Backend-Elysian-/tree/main/trust-layer) | Smart Contract | Solidity + Hardhat |
 
 ---
 
-## 👥 Contributors
-
-<table>
-  <tr>
-    <td align="center"><a href="https://github.com/MattYudha"><b>MattYudha</b></a><br/>Matt</td>
-    <td align="center"><a href="https://github.com/wreckitral"><b>wreckitral</b></a><br/>Darhanaya Sofhiaa</td>
-  </tr>
-</table>
-
----
-
-## 📄 License
-
-This project is for educational and development purposes.
+> **Versi:** 3.0.0 (Blockchain-Integrated)  
+> **Tanggal:** Mei 2026  
+> **Pemilik:** Matt (Team Elysian)
