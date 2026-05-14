@@ -2,16 +2,16 @@ server:
   port: "7777"
   host: "0.0.0.0"
   environment: "development"
-  read_timeout: 30s
-  write_timeout: 30s
+  read_timeout: 10s
+  write_timeout: 10s
   idle_timeout: 120s
   graceful_shutdown_timeout: 30s
 
 database:
   host: "localhost"
   port: "5432"
-  user: "postgres"
-  password: "postgres"
+  user: "elysian"
+  password: "elysian123"
   name: "elysian"
   ssl_mode: "disable"
   max_open_conns: 25
@@ -27,26 +27,26 @@ redis:
   pool_size: 10
 
 jwt:
-  secret: "elysian-development-secret-key-2024"
+  secret: "dev_secret_key_change_in_production_min_32_characters"
   access_token_expiry: 15m
-  refresh_token_expiry: 720h
-  issuer: "elysian-api"
+  refresh_token_expiry: 168h  # 7 days
+  issuer: "elysian"
 
 rabbitmq:
-  url: ""
-  queue_name: ""
-  worker_count: 1
+  url: "amqp://guest:guest@localhost:5672/"
+  queue_name: "workflow_executions"
+  worker_count: 5
 
 storage:
-  endpoint: ""
+  endpoint: "http://localhost:9000"
   access_key: ""
   secret_key: ""
-  bucket: ""
-  region: ""
+  bucket: "elysian-flow-assets"
+  region: "us-east-1"
   use_ssl: false
 
 ml:
-  service_url: ""
+  service_url: "http://localhost:5000"
   timeout: 30s
   retry_count: 3
   retry_delay: 1s
@@ -56,17 +56,20 @@ security:
   rate_limit_burst: 10
   cors_allowed_origins:
     - "http://localhost:3000"
+    - "http://localhost:8081"
+    - "https://elysian.vercel.app"
+    - "https://*.vercel.app"
   cors_allowed_methods:
     - "GET"
     - "POST"
     - "PUT"
-    - "PATCH"
     - "DELETE"
+    - "PATCH"
     - "OPTIONS"
   cors_allowed_headers:
-    - "Origin"
     - "Content-Type"
     - "Authorization"
+    - "X-Requested-With"
   cors_allow_credentials: true
 
 logging:
@@ -75,18 +78,14 @@ logging:
   output: "stdout"
 
 upload:
-  max_file_size: 10485760
+  max_file_size: 10485760  # 10MB in bytes
   allowed_file_types:
     - ".pdf"
-    - ".doc"
-    - ".docx"
-
-ai:
-  deepseek_api_key: ""
-  openai_api_key: ""
-  gemini_api_key: ""
-  docling_url: ""
-  unstructured_url: ""
+    - ".csv"
+    - ".json"
+    - ".txt"
+    - ".png"
+    - ".jpg"
 
 blockchain:
   enabled: true

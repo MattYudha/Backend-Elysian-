@@ -13,7 +13,8 @@ type Config struct {
 	Security SecurityConfig `mapstructure:"security"`
 	Logging  LoggingConfig  `mapstructure:"logging"`
 	Upload   UploadConfig   `mapstructure:"upload"`
-	AI       AIConfig       `mapstructure:"ai"`
+	AI         AIConfig         `mapstructure:"ai"`
+	Blockchain BlockchainConfig `mapstructure:"blockchain"`
 }
 
 type AIConfig struct {
@@ -39,7 +40,7 @@ type DatabaseConfig struct {
 	Host            string        `mapstructure:"host" validate:"required"`
 	Port            string        `mapstructure:"port" validate:"required"`
 	User            string        `mapstructure:"user" validate:"required"`
-	Password        string        `mapstructure:"password" validate:"required"`
+	Password        string        `mapstructure:"password"`
 	Name            string        `mapstructure:"name" validate:"required"`
 	SSLMode         string        `mapstructure:"ssl_mode"`
 	PgBouncerURL    string        `mapstructure:"pgbouncer_url"` // Explicit parameter for architecture clarity

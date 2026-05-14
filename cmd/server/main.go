@@ -19,6 +19,7 @@ import (
 	"github.com/pressly/goose/v3"
 
 	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/agent"
+	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/blockchain"
 	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/cache"
 	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/database"
 	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/mq"
@@ -213,9 +214,32 @@ func main() {
 		ragSearchHandler = handler.NewRAGSearchHandler(postgresRepo.NewDocumentRepository(db), cfg.AI.GeminiAPIKey)
 	}
 
+	// Blockchain Service (optional — only if configured)
+	var bcService *blockchain.AuditTrailService
+	if cfg.Blockchain.Enabled && cfg.Blockchain.RPCURL != "" {
+		var err error
+		bcService, err = blockchain.NewAuditTrailService(
+			cfg.Blockchain.RPCURL,
+			cfg.Blockchain.ContractAddr,
+			cfg.Blockchain.PrivateKey,
+			cfg.Blockchain.Network,
+		)
+		if err != nil {
+			log.Printf("[WARN] Blockchain service initialization failed: %v — audit trail will store hashes locally only", err)
+			bcService = nil
+		} else {
+			log.Printf("Blockchain service connected: network=%s, contract=%s", cfg.Blockchain.Network, cfg.Blockchain.ContractAddr)
+		}
+		defer func() {
+			if bcService != nil {
+				bcService.Close()
+			}
+		}()
+	}
+
 	// Swarm Components
 	swarmRepo := postgresRepo.NewSwarmRepository(db)
-	swarmUsecase := swarm.NewSwarmUsecase(swarmRepo, redisCache)
+	swarmUsecase := swarm.NewSwarmUsecase(swarmRepo, redisCache, bcService)
 	swarmHandler := handler.NewSwarmHandler(swarmUsecase, redisCache)
 
 	routes.SetupRoutes(router, healthHandler, userHandler, authHandler, workflowHandler, executionHandler, documentHandler, ragSearchHandler, swarmHandler, authMiddleware)

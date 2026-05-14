@@ -4,23 +4,27 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/Elysian-Rebirth/backend-go/internal/domain"
+	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/blockchain"
 	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/cache"
 	"github.com/Elysian-Rebirth/backend-go/internal/repository/postgres"
 	"gorm.io/datatypes"
 )
 
 type SwarmUsecase struct {
-	swarmRepo *postgres.SwarmRepository
-	redis     cache.Cache
+	swarmRepo         *postgres.SwarmRepository
+	redis             cache.Cache
+	blockchainService *blockchain.AuditTrailService
 }
 
-func NewSwarmUsecase(swarmRepo *postgres.SwarmRepository, redis cache.Cache) *SwarmUsecase {
+func NewSwarmUsecase(swarmRepo *postgres.SwarmRepository, redis cache.Cache, bcService *blockchain.AuditTrailService) *SwarmUsecase {
 	return &SwarmUsecase{
-		swarmRepo: swarmRepo,
-		redis:     redis,
+		swarmRepo:         swarmRepo,
+		redis:             redis,
+		blockchainService: bcService,
 	}
 }
 
@@ -41,8 +45,7 @@ func (u *SwarmUsecase) TriggerSwarm(ctx context.Context, documentID string, item
 		DocumentID:   documentID,
 		DocumentType: "RAPBD",
 		Items:        items,
-		// Assuming the server is running on localhost:7777 for hackathon
-		WebhookURL: "http://host.docker.internal:7777/api/internal/swarm/callback",
+		WebhookURL:   "http://host.docker.internal:7777/api/internal/swarm/callback",
 	}
 
 	payloadBytes, err := json.Marshal(payload)
@@ -51,12 +54,6 @@ func (u *SwarmUsecase) TriggerSwarm(ctx context.Context, documentID string, item
 	}
 
 	// 3. LPUSH to Redis
-	// We need to access the underlying redis client. The cache.Cache interface might not have LPUSH.
-	// But we can use the Set method if LPUSH is not available, or we might need to cast.
-	// Wait, the cache interface in Elysian is basic. I'll use standard cache methods or cast it.
-	// Let's assume there's a way to publish or we just cast to RedisCache.
-	
-	// For now, let's use the underlying redis client.
 	if redisCache, ok := u.redis.(*cache.RedisCache); ok {
 		err = redisCache.GetClient().LPush(ctx, "swarm:tasks", payloadBytes).Err()
 		if err != nil {
@@ -77,7 +74,11 @@ func (u *SwarmUsecase) HandleCallback(ctx context.Context, callback domain.Swarm
 
 	task.Status = callback.Status
 	task.Summary = callback.Summary
-	
+	task.RationaleHash = callback.Hashes.RationaleHash
+	task.ConsensusHash = callback.Hashes.ConsensusHash
+	task.BlockchainNet = callback.Blockchain.Network
+	task.BlockchainStat = callback.Blockchain.Status
+
 	resultsBytes, _ := json.Marshal(callback.Results)
 	task.Results = datatypes.JSON(resultsBytes)
 	task.UpdatedAt = time.Now()
@@ -86,11 +87,63 @@ func (u *SwarmUsecase) HandleCallback(ctx context.Context, callback domain.Swarm
 		return fmt.Errorf("failed to update task: %w", err)
 	}
 
-	// In a real app, we'd also publish an event to Redis PubSub here so SSE handlers on any node can pick it up.
-	// For this hackathon, we'll use a local Go channel or Redis PubSub in the handler.
+	// Publish to Redis PubSub for SSE streaming
 	if redisCache, ok := u.redis.(*cache.RedisCache); ok {
 		redisCache.GetClient().Publish(ctx, "swarm:events", resultsBytes)
 	}
 
+	// Step 5 — Push hash to blockchain (if configured)
+	if u.blockchainService != nil && task.RationaleHash != "" && task.ConsensusHash != "" {
+		go func() {
+			// Use background context with timeout
+			bgCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+
+			txHash, err := u.blockchainService.InsertLog(bgCtx, task.ID, task.RationaleHash, task.ConsensusHash)
+			if err != nil {
+				log.Printf("[Blockchain] insertLog failed for task %s: %v", task.ID, err)
+				// Update status to FAILED
+				u.updateBlockchainStatus(bgCtx, task.ID, "", "FAILED")
+				return
+			}
+
+			log.Printf("[Blockchain] insertLog tx submitted: %s for task %s", txHash, task.ID)
+
+			// Wait for confirmation
+			receipt, err := u.blockchainService.WaitForConfirmation(bgCtx, txHash, 90*time.Second)
+			if err != nil {
+				log.Printf("[Blockchain] confirmation timeout for task %s: %v", task.ID, err)
+				u.updateBlockchainStatus(bgCtx, task.ID, txHash, "PENDING_CONFIRMATION")
+				return
+			}
+
+			if receipt.Status == 1 {
+				log.Printf("[Blockchain] tx confirmed for task %s, block: %d", task.ID, receipt.BlockNumber)
+				u.updateBlockchainStatus(bgCtx, task.ID, txHash, "VERIFIED")
+			} else {
+				log.Printf("[Blockchain] tx failed for task %s", task.ID)
+				u.updateBlockchainStatus(bgCtx, task.ID, txHash, "FAILED")
+			}
+		}()
+	}
+
 	return nil
+}
+
+func (u *SwarmUsecase) updateBlockchainStatus(ctx context.Context, taskID, txHash, status string) {
+	task, err := u.swarmRepo.GetByID(ctx, taskID)
+	if err != nil {
+		log.Printf("[Blockchain] failed to get task %s for status update: %v", taskID, err)
+		return
+	}
+
+	if txHash != "" {
+		task.BlockchainTx = txHash
+	}
+	task.BlockchainStat = status
+	task.UpdatedAt = time.Now()
+
+	if err := u.swarmRepo.Update(ctx, task); err != nil {
+		log.Printf("[Blockchain] failed to update task %s status: %v", taskID, err)
+	}
 }
