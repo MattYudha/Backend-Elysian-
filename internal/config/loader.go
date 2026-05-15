@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/go-playground/validator/v10"
@@ -182,6 +183,11 @@ func overrideWithEnv(cfg *Config) {
 		}
 		if v := os.Getenv("REDIS_PASSWORD"); v != "" {
 			cfg.Redis.Password = v
+		}
+		if v := os.Getenv("REDIS_DB"); v != "" {
+			if db, err := strconv.Atoi(v); err == nil {
+				cfg.Redis.DB = db
+			}
 		}
 	}
 
