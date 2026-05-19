@@ -56,6 +56,7 @@ type RedisConfig struct {
 	Password string `mapstructure:"password"`
 	DB       int    `mapstructure:"db"`
 	PoolSize int    `mapstructure:"pool_size" validate:"min=1"`
+	UseTLS   bool   `mapstructure:"use_tls"`
 }
 
 type JWTConfig struct {

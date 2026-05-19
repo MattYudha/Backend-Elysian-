@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"strings"
 	"time"
@@ -15,7 +16,7 @@ type RedisCache struct {
 }
 
 func NewRedisCache(cfg *config.Config) (Cache, error) {
-	client := redis.NewClient(&redis.Options{
+	options := &redis.Options{
 		Addr:         cfg.GetRedisDSN(),
 		Password:     cfg.Redis.Password,
 		DB:           cfg.Redis.DB,
@@ -23,7 +24,15 @@ func NewRedisCache(cfg *config.Config) (Cache, error) {
 		DialTimeout:  5 * time.Second,
 		ReadTimeout:  3 * time.Second,
 		WriteTimeout: 3 * time.Second,
-	})
+	}
+
+	if cfg.Redis.UseTLS {
+		options.TLSConfig = &tls.Config{
+			InsecureSkipVerify: true,
+		}
+	}
+
+	client := redis.NewClient(options)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

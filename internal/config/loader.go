@@ -165,6 +165,9 @@ func overrideWithEnv(cfg *Config) {
 	// Format: redis://:password@host:port or redis://default:password@host:port
 	if redisURL := os.Getenv("REDIS_URL"); redisURL != "" {
 		if u, err := url.Parse(redisURL); err == nil {
+			if u.Scheme == "rediss" {
+				cfg.Redis.UseTLS = true
+			}
 			cfg.Redis.Host = u.Hostname()
 			if port := u.Port(); port != "" {
 				cfg.Redis.Port = port
@@ -197,6 +200,9 @@ func overrideWithEnv(cfg *Config) {
 		if db, err := strconv.Atoi(v); err == nil {
 			cfg.Redis.DB = db
 		}
+	}
+	if v := os.Getenv("REDIS_TLS"); v == "true" {
+		cfg.Redis.UseTLS = true
 	}
 
 	// JWT

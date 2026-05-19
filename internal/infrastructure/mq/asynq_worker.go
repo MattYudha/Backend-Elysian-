@@ -2,6 +2,7 @@ package mq
 
 import (
 	"context"
+	"crypto/tls"
 	"log"
 
 	"github.com/Elysian-Rebirth/backend-go/internal/config"
@@ -26,6 +27,12 @@ func NewAsynqWorker(cfg *config.Config) *AsynqWorker {
 		Addr:     cfg.Redis.Host + ":" + cfg.Redis.Port,
 		Password: cfg.Redis.Password,
 		DB:       cfg.Redis.DB,
+	}
+
+	if cfg.Redis.UseTLS {
+		redisConnOpt.TLSConfig = &tls.Config{
+			InsecureSkipVerify: true,
+		}
 	}
 
 	server := asynq.NewServer(

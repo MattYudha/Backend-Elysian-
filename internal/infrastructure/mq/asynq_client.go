@@ -1,6 +1,7 @@
 package mq
 
 import (
+	"crypto/tls"
 	"github.com/Elysian-Rebirth/backend-go/internal/config"
 	"github.com/hibiken/asynq"
 )
@@ -14,6 +15,12 @@ func NewAsynqClient(cfg *config.Config) *AsynqClient {
 		Addr:     cfg.Redis.Host + ":" + cfg.Redis.Port,
 		Password: cfg.Redis.Password,
 		DB:       cfg.Redis.DB,
+	}
+
+	if cfg.Redis.UseTLS {
+		redisConnOpt.TLSConfig = &tls.Config{
+			InsecureSkipVerify: true,
+		}
 	}
 
 	client := asynq.NewClient(redisConnOpt)
