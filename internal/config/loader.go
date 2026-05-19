@@ -172,6 +172,12 @@ func overrideWithEnv(cfg *Config) {
 			if pass, ok := u.User.Password(); ok {
 				cfg.Redis.Password = pass
 			}
+			// Parse DB from path if present (e.g. /1)
+			if len(u.Path) > 1 {
+				if db, err := strconv.Atoi(u.Path[1:]); err == nil {
+					cfg.Redis.DB = db
+				}
+			}
 		}
 	} else {
 		// Individual Redis fields
@@ -184,10 +190,12 @@ func overrideWithEnv(cfg *Config) {
 		if v := os.Getenv("REDIS_PASSWORD"); v != "" {
 			cfg.Redis.Password = v
 		}
-		if v := os.Getenv("REDIS_DB"); v != "" {
-			if db, err := strconv.Atoi(v); err == nil {
-				cfg.Redis.DB = db
-			}
+	}
+
+	// Always allow REDIS_DB env var to override
+	if v := os.Getenv("REDIS_DB"); v != "" {
+		if db, err := strconv.Atoi(v); err == nil {
+			cfg.Redis.DB = db
 		}
 	}
 
