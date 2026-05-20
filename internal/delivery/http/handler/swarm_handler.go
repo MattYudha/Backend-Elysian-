@@ -110,3 +110,23 @@ func (h *SwarmHandler) StreamEvents(c *gin.Context) {
 		}
 	}
 }
+
+func (h *SwarmHandler) GetByID(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Task ID is required"})
+		return
+	}
+
+	task, err := h.swarmUsecase.GetSwarmTask(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data":   task,
+	})
+}
+

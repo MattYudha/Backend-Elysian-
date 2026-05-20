@@ -18,22 +18,28 @@ import (
 
 // Task names
 const (
-	TypeProcessDocument = "rag:process_document"
+	TypeParseDocument = "rag:parse_document"
+	TypeEmbedDocument = "rag:embed_document"
 )
 
-// ProcessDocumentPayload carries the IDs needed by the background worker.
-type ProcessDocumentPayload struct {
+// ParseDocumentPayload carries the IDs needed for text extraction.
+type ParseDocumentPayload struct {
 	DocumentID string `json:"document_id"`
 	TenantID   string `json:"tenant_id"`
 	S3URI      string `json:"s3_uri"`
 	Category   string `json:"category"`
 }
 
-// NewProcessDocumentTask creates an Asynq task pinned to the heavy_parsing queue.
-// The heavy_parsing queue is limited to concurrency=2 in the server config to
-// prevent Docling OOM when multiple large PDFs are uploaded simultaneously.
-func NewProcessDocumentTask(documentID, tenantID, s3URI string, category string) (*asynq.Task, error) {
-	payload, err := json.Marshal(ProcessDocumentPayload{
+// EmbedDocumentPayload carries the IDs needed for vectorization.
+type EmbedDocumentPayload struct {
+	DocumentID string `json:"document_id"`
+	TenantID   string `json:"tenant_id"`
+	Category   string `json:"category"`
+}
+
+// NewParseDocumentTask creates an Asynq task to parse a document.
+func NewParseDocumentTask(documentID, tenantID, s3URI string, category string) (*asynq.Task, error) {
+	payload, err := json.Marshal(ParseDocumentPayload{
 		DocumentID: documentID,
 		TenantID:   tenantID,
 		S3URI:      s3URI,
@@ -44,20 +50,38 @@ func NewProcessDocumentTask(documentID, tenantID, s3URI string, category string)
 	}
 
 	return asynq.NewTask(
-		TypeProcessDocument,
+		TypeParseDocument,
 		payload,
 		asynq.MaxRetry(3),
-		asynq.Queue("heavy_parsing"), // MANDATORY: isolates Docling workload from other queues
+		asynq.Queue("heavy_parsing"),
 	), nil
 }
 
-// DocumentTaskHandler is the concrete Asynq handler for the full RAG pipeline.
-// All heavy state (DB, S3, Docling, Gemini) is injected at startup — NOT per task invocation.
+// NewEmbedDocumentTask creates an Asynq task to chunk and embed parsed text.
+func NewEmbedDocumentTask(documentID, tenantID string, category string) (*asynq.Task, error) {
+	payload, err := json.Marshal(EmbedDocumentPayload{
+		DocumentID: documentID,
+		TenantID:   tenantID,
+		Category:   category,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return asynq.NewTask(
+		TypeEmbedDocument,
+		payload,
+		asynq.MaxRetry(3),
+		asynq.Queue("heavy_parsing"),
+	), nil
+}
+
+// DocumentTaskHandler is the concrete Asynq handler for the split RAG pipeline.
 type DocumentTaskHandler struct {
 	docRepo      domain.DocumentRepository
 	s3           *storage.S3Service
-	parser       *parsing.DocumentParser // Docling → Unstructured.io → plain text
-	geminiAPIKey string                  // from config.AI.GeminiAPIKey, never hardcoded
+	parser       *parsing.DocumentParser
+	geminiAPIKey string
 }
 
 func NewDocumentTaskHandler(
@@ -74,50 +98,92 @@ func NewDocumentTaskHandler(
 	}
 }
 
-// Handle runs the full RAG ingestion pipeline:
-//
-//	S3 Download → Docling Parse → Markdown-Aware Chunk → Gemini Embed → Atomic DB Insert
-func (h *DocumentTaskHandler) Handle(ctx context.Context, t *asynq.Task) error {
-	var payload ProcessDocumentPayload
+// HandleParseDocument performs Step 1: Download -> Extract Text -> Save to DB (pending_qa)
+func (h *DocumentTaskHandler) HandleParseDocument(ctx context.Context, t *asynq.Task) error {
+	var payload ParseDocumentPayload
 	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
-		// Malformed payload can never succeed — skip retry immediately
+		return fmt.Errorf("json.Unmarshal failed: %v: %w", err, asynq.SkipRetry)
+	}
+
+	docID, _ := uuid.Parse(payload.DocumentID)
+
+	log.Printf("[RAG-Worker] ▶ Parsing Document %s for Tenant %s (S3: %s)",
+		payload.DocumentID, payload.TenantID, payload.S3URI)
+
+	// 1. Mark as processing/parsing
+	_ = h.docRepo.UpdateStatus(ctx, docID, "processing", nil)
+
+	// 2. Download from S3 to local temp file
+	localPath, err := h.s3.DownloadToTemp(ctx, payload.S3URI)
+	if err != nil {
+		h.failDoc(ctx, docID, "S3 download failed: "+err.Error())
+		return fmt.Errorf("S3 download failed: %w", err)
+	}
+	defer os.Remove(localPath)
+
+	// 3. Extract text
+	rawText, err := h.parser.ExtractText(ctx, localPath)
+	if err != nil {
+		h.failDoc(ctx, docID, "text extraction failed: "+err.Error())
+		return fmt.Errorf("text extraction failed: %w", err)
+	}
+
+	// 4. Update status to pending_qa, storing the raw parsed text inside metadata
+	metadata := map[string]interface{}{
+		"extracted_text": rawText,
+		"parser":         "docling",
+	}
+	if err := h.docRepo.UpdateStatus(ctx, docID, "pending_qa", metadata); err != nil {
+		return fmt.Errorf("failed to mark document pending_qa: %w", err)
+	}
+
+	log.Printf("[RAG-Worker] ✅ Document %s parsed, status set to pending_qa", payload.DocumentID)
+	return nil
+}
+
+// HandleEmbedDocument performs Step 2: Retrieve Extracted Text -> Chunk -> Gemini Embed -> Store chunks (ready)
+func (h *DocumentTaskHandler) HandleEmbedDocument(ctx context.Context, t *asynq.Task) error {
+	var payload EmbedDocumentPayload
+	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
 		return fmt.Errorf("json.Unmarshal failed: %v: %w", err, asynq.SkipRetry)
 	}
 
 	docID, _ := uuid.Parse(payload.DocumentID)
 	tenantID, _ := uuid.Parse(payload.TenantID)
 
-	log.Printf("[RAG-Worker] ▶ Processing Document %s for Tenant %s (S3: %s)",
-		payload.DocumentID, payload.TenantID, payload.S3URI)
+	log.Printf("[RAG-Worker] ▶ Embedding Document %s for Tenant %s", payload.DocumentID, payload.TenantID)
 
-	// ── Step 1: Mark as processing ─────────────────────────────────────────────
+	// 1. Mark as processing/embedding
 	_ = h.docRepo.UpdateStatus(ctx, docID, "processing", nil)
 
-	// ── Step 2: Download from S3 to local temp file ─────────────────────────────
-	// Zero server RAM for the file itself — only metadata lives in Go memory.
-	localPath, err := h.s3.DownloadToTemp(ctx, payload.S3URI)
+	// 2. Retrieve document from DB to get the extracted text
+	doc, err := h.docRepo.FindByID(ctx, payload.DocumentID)
 	if err != nil {
-		h.failDoc(ctx, docID, "S3 download failed: "+err.Error())
-		return fmt.Errorf("S3 download failed: %w", err) // Asynq retries
-	}
-	defer os.Remove(localPath) // Always clean up temp file
-
-	// ── Step 3: Enterprise document parsing via Docling ──────────────────────────
-	// Docling preserves multi-column layout, tables, and OCR text from scanned pages.
-	// Falls back to Unstructured.io, then plain text reader.
-	rawText, err := h.parser.ExtractText(ctx, localPath)
-	if err != nil {
-		h.failDoc(ctx, docID, "text extraction failed: "+err.Error())
-		return fmt.Errorf("text extraction failed: %w", err) // Asynq retries
+		h.failDoc(ctx, docID, "failed to find document record: "+err.Error())
+		return fmt.Errorf("failed to find document: %w", err)
 	}
 
-	// ── Step 4: Markdown-Header-Aware Chunking ──────────────────────────────────
-	// Rules enforced here:
-	//  a) Split on # ## ### header boundaries — NEVER in the middle of a section
-	//  b) Tables are atomic units — NEVER split between table rows
-	//  c) Every chunk is prefixed with its full header breadcrumb (parent context injection)
-	//     e.g. "[Context: HR Policy > Leave > Sick Leave]\n\n<chunk content>"
-	mdChunks := MarkdownAwareChunker(rawText, 1000)
+	// 3. Parse ai_analysis_json to extract the text
+	var metadata map[string]interface{}
+	if err := json.Unmarshal([]byte(doc.AiAnalysisJSON), &metadata); err != nil {
+		h.failDoc(ctx, docID, "failed to parse document metadata: "+err.Error())
+		return fmt.Errorf("failed to parse metadata: %w", err)
+	}
+
+	extractedTextVal, ok := metadata["extracted_text"]
+	if !ok {
+		h.failDoc(ctx, docID, "extracted_text not found in document metadata")
+		return fmt.Errorf("extracted_text missing: %w", asynq.SkipRetry)
+	}
+
+	extractedText, ok := extractedTextVal.(string)
+	if !ok || extractedText == "" {
+		h.failDoc(ctx, docID, "extracted_text is empty or not a string")
+		return fmt.Errorf("extracted_text is empty: %w", asynq.SkipRetry)
+	}
+
+	// 4. Markdown-Header-Aware Chunking
+	mdChunks := MarkdownAwareChunker(extractedText, 1000)
 	log.Printf("[RAG-Worker] ✂ %d semantic chunks from Document %s", len(mdChunks), payload.DocumentID)
 
 	if len(mdChunks) == 0 {
@@ -125,9 +191,7 @@ func (h *DocumentTaskHandler) Handle(ctx context.Context, t *asynq.Task) error {
 		return fmt.Errorf("chunker produced no output: %w", asynq.SkipRetry)
 	}
 
-	// ── Step 5: Batch embed via Gemini text-embedding-004 ──────────────────────
-	// We embed FullContent (header breadcrumb + chunk text) so the vector
-	// encodes the document position, not just the fragment meaning.
+	// 5. Batch embed via Gemini
 	fullTexts := make([]string, len(mdChunks))
 	for i, c := range mdChunks {
 		fullTexts[i] = c.FullContent
@@ -136,20 +200,18 @@ func (h *DocumentTaskHandler) Handle(ctx context.Context, t *asynq.Task) error {
 	embeddings, err := h.batchEmbed(ctx, fullTexts)
 	if err != nil {
 		h.failDoc(ctx, docID, "Gemini embedding failed: "+err.Error())
-		return fmt.Errorf("Gemini embedding failed: %w", err) // Asynq retries
+		return fmt.Errorf("Gemini embedding failed: %w", err)
 	}
 
-	// ── Step 6: Build DocumentChunk slice ──────────────────────────────────────
-	// TenantID on every chunk is mandatory for pgvector pre-filtering.
+	// 6. Build DocumentChunk slice
 	var docChunks []domain.DocumentChunk
 	for i, mdChunk := range mdChunks {
-		// Mock PageNumber mapping (assuming ~3 chunks per literal page of A4 text)
 		approxPageNum := (i / 3) + 1
 
 		docChunks = append(docChunks, domain.DocumentChunk{
 			TenantID:   tenantID,
 			DocumentID: docID,
-			Content:    mdChunk.FullContent, // store with context prefix
+			Content:    mdChunk.FullContent,
 			Embedding:  embeddings[i],
 			ChunkIndex: mdChunk.Index,
 			PageNumber: approxPageNum,
@@ -157,27 +219,23 @@ func (h *DocumentTaskHandler) Handle(ctx context.Context, t *asynq.Task) error {
 		})
 	}
 
-	// ── Step 7: Atomic batch insert ─────────────────────────────────────────────
-	// ALL chunks are inserted in a single transaction.
-	// If any chunk fails, the entire batch is rolled back.
-	// No orphaned partial knowledge base states are possible.
+	// 7. Atomic batch insert
 	if err := h.docRepo.StoreChunks(ctx, docChunks); err != nil {
 		h.failDoc(ctx, docID, "atomic chunk insert failed: "+err.Error())
-		return fmt.Errorf("atomic chunk insert failed: %w", err) // Asynq retries
+		return fmt.Errorf("atomic chunk insert failed: %w", err)
 	}
 
-	// ── Step 8: Mark document as ready ─────────────────────────────────────────
-	metadata := map[string]interface{}{
-		"chunks_count": len(docChunks),
-		"model":        "text-embedding-004",
-		"parser":       "docling",
-	}
+	// 8. Update status to ready, preserving metadata but removing extracted_text to save DB storage space
+	delete(metadata, "extracted_text")
+	metadata["chunks_count"] = len(docChunks)
+	metadata["model"] = "text-embedding-004"
+	metadata["parser"] = "docling"
+
 	if err := h.docRepo.UpdateStatus(ctx, docID, "ready", metadata); err != nil {
 		return fmt.Errorf("failed to mark document ready: %w", err)
 	}
 
-	log.Printf("[RAG-Worker] ✅ Document %s ready: %d chunks, model=text-embedding-004",
-		payload.DocumentID, len(docChunks))
+	log.Printf("[RAG-Worker] ✅ Document %s ready: %d chunks", payload.DocumentID, len(docChunks))
 	return nil
 }
 
@@ -188,7 +246,6 @@ func (h *DocumentTaskHandler) failDoc(ctx context.Context, docID uuid.UUID, reas
 }
 
 // batchEmbed sends all chunk texts to Gemini text-embedding-004 in a single batch call.
-// One API call per task (not one per chunk) — minimizes latency and API quota usage.
 func (h *DocumentTaskHandler) batchEmbed(ctx context.Context, texts []string) ([][]float32, error) {
 	client, err := genai.NewClient(ctx, option.WithAPIKey(h.geminiAPIKey))
 	if err != nil {

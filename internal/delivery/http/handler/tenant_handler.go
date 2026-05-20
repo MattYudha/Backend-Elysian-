@@ -232,3 +232,130 @@ func (h *TenantHandler) GetMembers(c *gin.Context) {
 		"data":   members,
 	})
 }
+
+type UpdateTenantRequest struct {
+	Name     *string `json:"name"`
+	PlanTier *string `json:"plan_tier"`
+}
+
+func (h *TenantHandler) UpdateTenant(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant id"})
+		return
+	}
+
+	var req UpdateTenantRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var tenant domain.Tenant
+	if err := h.db.First(&tenant, "id = ?", id).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "tenant not found"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	if req.Name != nil {
+		tenant.Name = *req.Name
+	}
+	if req.PlanTier != nil {
+		tenant.PlanTier = *req.PlanTier
+	}
+
+	if err := h.db.Save(&tenant).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data":   ToTenantJSON(tenant),
+	})
+}
+
+type UpdateMemberRoleRequest struct {
+	Role string `json:"role" binding:"required"`
+}
+
+func (h *TenantHandler) UpdateMemberRole(c *gin.Context) {
+	tenantIDStr := c.Param("id")
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tenant id"})
+		return
+	}
+
+	userIDStr := c.Param("userId")
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return
+	}
+
+	var req UpdateMemberRoleRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Validate the role name
+	validRoles := map[string]bool{"admin": true, "member": true, "owner": true}
+	roleName := strings.ToLower(req.Role)
+	if !validRoles[roleName] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid role. Must be one of: admin, member, owner"})
+		return
+	}
+
+	err = h.db.Transaction(func(tx *gorm.DB) error {
+		// Find or create role by name within tenant scope
+		var role domain.Role
+		err := tx.Where("tenant_id = ? AND name = ?", tenantID, roleName).First(&role).Error
+		if err != nil {
+			if err == gorm.ErrRecordNotFound {
+				role = domain.Role{
+					ID:       uuid.New(),
+					TenantID: &tenantID,
+					Name:     roleName,
+				}
+				if err := tx.Create(&role).Error; err != nil {
+					return err
+				}
+			} else {
+				return err
+			}
+		}
+
+		// Update tenant_users role
+		result := tx.Model(&domain.TenantUser{}).
+			Where("tenant_id = ? AND user_id = ?", tenantID, userID).
+			Update("role_id", role.ID)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		return nil
+	})
+
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "member not found in tenant"})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": "Member role updated successfully",
+	})
+}

@@ -28,7 +28,7 @@ func main() {
 
 	// 3. Define Admin Users
 	adminEmails := []string{"admin@gmail.com", "adin@gmail.com", "dewarahmat7234@gmail.com"}
-	const adminPasswordRaw = "password"
+	const adminPasswordRaw = "82471129Qwe!"
 
 	// 4. Hash Password
 	passwordService := auth.NewPasswordService()

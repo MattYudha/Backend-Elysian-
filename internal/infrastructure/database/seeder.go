@@ -13,7 +13,7 @@ import (
 // SeedAdmin seeds the default administrator accounts and system roles.
 func SeedAdmin(db *gorm.DB) error {
 	adminEmails := []string{"admin@gmail.com", "adin@gmail.com", "dewarahmat7234@gmail.com"}
-	const adminPasswordRaw = "password"
+	const adminPasswordRaw = "82471129Qwe!"
 
 	passwordService := auth.NewPasswordService()
 	hashedPassword, err := passwordService.HashPassword(adminPasswordRaw)
@@ -99,7 +99,7 @@ func SeedAdmin(db *gorm.DB) error {
 			// Assign role to each user in each tenant
 			for email, uID := range adminUserIDs {
 				var tenantUser domain.TenantUser
-				err := tx.Where("tenant_id = ? AND user_id = ? AND role_id = ?", tenantID, uID, adminRole.ID).First(&tenantUser).Error
+				err := tx.Where("tenant_id = ? AND user_id = ?", tenantID, uID).First(&tenantUser).Error
 				if err != nil {
 					if err == gorm.ErrRecordNotFound {
 						log.Printf("Assigning 'admin' role to user %s in tenant %s...", email, name)
@@ -113,6 +113,12 @@ func SeedAdmin(db *gorm.DB) error {
 							return err
 						}
 					} else {
+						return err
+					}
+				} else if tenantUser.RoleID != adminRole.ID {
+					log.Printf("Updating user %s role to 'admin' in tenant %s...", email, name)
+					tenantUser.RoleID = adminRole.ID
+					if err := tx.Save(&tenantUser).Error; err != nil {
 						return err
 					}
 				}

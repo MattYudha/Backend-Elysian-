@@ -23,6 +23,8 @@ func SetupRoutes(
 	chatHandler *handler.ChatHandler,
 	agentHandler *handler.AgentHandler,
 	tenantHandler *handler.TenantHandler,
+	dataTypeHandler *handler.DataTypeHandler,
+	blockchainHandler *handler.BlockchainHandler,
 	authMiddleware gin.HandlerFunc,
 ) {
 	// Swagger
@@ -83,6 +85,17 @@ func SetupRoutes(
 				tenants.POST("", tenantHandler.CreateTenant)
 				tenants.GET("/:id", tenantHandler.GetByID)
 				tenants.GET("/:id/members", tenantHandler.GetMembers)
+				tenants.PUT("/:id", tenantHandler.UpdateTenant)
+				tenants.PUT("/:id/members/:userId", tenantHandler.UpdateMemberRole)
+			}
+
+			// Data Types (Strict Multi-Tenancy Enforced)
+			dataTypes := v1.Group("/data-types")
+			dataTypes.Use(authMiddleware, middleware.TenantMiddleware())
+			{
+				dataTypes.GET("", dataTypeHandler.List)
+				dataTypes.POST("", dataTypeHandler.Create)
+				dataTypes.DELETE("/:id", dataTypeHandler.Delete)
 			}
 
 			// Workflows (Strict Multi-Tenancy Enforced)
@@ -120,6 +133,7 @@ func SetupRoutes(
 				docs.POST("/confirm", documentHandler.ConfirmUpload)
 				docs.GET("", documentHandler.List)
 				docs.POST("/search", ragSearchHandler.Search)
+				docs.POST("/:id/approve", documentHandler.Approve)
 			}
 
 			// Swarm (Strict Multi-Tenancy Enforced for Trigger)
@@ -132,7 +146,16 @@ func SetupRoutes(
 				protectedSwarm.Use(authMiddleware, middleware.TenantMiddleware())
 				{
 					protectedSwarm.POST("/upload", swarmHandler.Trigger)
+					protectedSwarm.GET("/tasks/:id", swarmHandler.GetByID)
 				}
+			}
+
+			// Blockchain Verification (Strict Multi-Tenancy Enforced)
+			blockchain := v1.Group("/blockchain")
+			blockchain.Use(authMiddleware, middleware.TenantMiddleware())
+			{
+				blockchain.GET("/status/:task_id", blockchainHandler.GetStatus)
+				blockchain.GET("/verify/:task_id", blockchainHandler.Verify)
 			}
 
 			// Dashboard (Strict Multi-Tenancy Enforced)

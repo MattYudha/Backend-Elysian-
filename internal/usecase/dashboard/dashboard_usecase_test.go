@@ -51,19 +51,20 @@ func TestDashboardUseCase_GetStats(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(15))
 
 	// 3. Token usage ledger sum
-	mock.ExpectQuery(`SELECT COALESCE\(SUM\(prompt_tokens \+ completion_tokens\), 0\) as total FROM token_usage_ledgers`).
+	mock.ExpectQuery(`SELECT COALESCE\(SUM\(prompt_tokens \+ completion_tokens\), 0\) as total FROM token_usage_ledgers WHERE tenant_id = \$1`).
 		WithArgs(tenantID).
 		WillReturnRows(sqlmock.NewRows([]string{"total"}).AddRow(int64(50000)))
 
-	// 4. Avg execution time
-	mock.ExpectQuery(`SELECT COALESCE\(AVG\(execution_time_ms\), 0\) as avg FROM pipelines`).
+	// 4. Pipeline execution metrics
+	mock.ExpectQuery(`(?i)SELECT.*FROM pipelines WHERE tenant_id = \$1`).
 		WithArgs(tenantID).
-		WillReturnRows(sqlmock.NewRows([]string{"avg"}).AddRow(float64(240)))
+		WillReturnRows(sqlmock.NewRows([]string{"total", "failed", "avg_ms", "p95_ms"}).
+			AddRow(int64(250), int64(3), float64(120.0), float64(150.0)))
 
-	// 5. Select tenant health_score, plan_tier
-	mock.ExpectQuery(`SELECT health_score, plan_tier FROM "tenants" WHERE id = \$1`).
+	// 5. Select tenant plan_tier
+	mock.ExpectQuery(`SELECT plan_tier FROM "tenants" WHERE id = \$1`).
 		WithArgs(tenantID).
-		WillReturnRows(sqlmock.NewRows([]string{"health_score", "plan_tier"}).AddRow(97, "enterprise"))
+		WillReturnRows(sqlmock.NewRows([]string{"plan_tier"}).AddRow("enterprise"))
 
 	res, err := uc.GetStats(context.Background(), tenantID.String())
 	if err != nil {

@@ -131,3 +131,41 @@ func (h *DocumentHandler) List(c *gin.Context) {
 		},
 	})
 }
+
+// Approve godoc
+// @Summary      Approve parsed document to begin vectorization
+// @Description  Transition status from pending_qa to processing and trigger chunk embedding task.
+// @Tags         knowledge
+// @Produce      json
+// @Param        id   path  string  true  "Document ID"
+// @Success      202  {object}  map[string]interface{}
+// @Failure      400  {object}  ErrorResponse
+// @Security     BearerAuth
+// @Router       /api/v1/documents/{id}/approve [post]
+func (h *DocumentHandler) Approve(c *gin.Context) {
+	docIDStr := c.Param("id")
+	docID, err := uuid.Parse(docIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid document ID path parameter"})
+		return
+	}
+
+	tenantIDStr := middleware.MustGetTenantIDFromContext(c)
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid X-Tenant-ID header"})
+		return
+	}
+
+	err = h.usecase.Approve(c.Request.Context(), tenantID, docID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"status":      "success",
+		"document_id": docID.String(),
+		"message":     "Document approved. Vectorization task enqueued.",
+	})
+}

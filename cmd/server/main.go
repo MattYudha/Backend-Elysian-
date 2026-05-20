@@ -193,23 +193,26 @@ func main() {
 
 	s3Service, s3Err := storage.NewS3Service(&cfg.Storage)
 	if s3Err != nil {
-		log.Printf("[WARN] S3 not configured (%v) — document upload disabled", s3Err)
+		log.Printf("[WARN] S3 not configured (%v) — document upload running in mock/local mode", s3Err)
+		s3Service = nil
 	} else {
 		// Ensure the bucket exists on startup
 		if err := s3Service.EnsureBucket(context.Background()); err != nil {
 			log.Printf("[WARN] Could not ensure S3 bucket: %v", err)
 		}
-		// docRepo previously initialized above
+	}
 
-		// DocumentUsecase orchestrates presign → DB record → Asynq enqueue
-		docUsecase := documentUsecase.NewDocumentUsecase(docRepo, s3Service, asynqClient)
-		documentHandler = handler.NewDocumentHandler(docUsecase)
+	// Always initialize docUsecase and documentHandler to prevent panic dereferences
+	docUsecase := documentUsecase.NewDocumentUsecase(docRepo, s3Service, asynqClient)
+	documentHandler = handler.NewDocumentHandler(docUsecase)
 
+	if s3Service != nil {
 		// Start Asynq Worker with Docling parser + Gemini key from config (never hardcoded)
 		asynqWorker := mq.NewAsynqWorker(cfg)
 		docParser := parsing.NewDocumentParser(cfg.AI.DoclingURL, cfg.AI.UnstructuredURL)
 		docTaskHandler := rag.NewDocumentTaskHandler(docRepo, s3Service, docParser, cfg.AI.GeminiAPIKey)
-		asynqWorker.RegisterHandler(rag.TypeProcessDocument, docTaskHandler.Handle)
+		asynqWorker.RegisterHandler(rag.TypeParseDocument, docTaskHandler.HandleParseDocument)
+		asynqWorker.RegisterHandler(rag.TypeEmbedDocument, docTaskHandler.HandleEmbedDocument)
 		go func() {
 			if err := asynqWorker.Start(); err != nil {
 				log.Printf("[WARN] Asynq Worker failed to start: %v", err)
@@ -253,6 +256,7 @@ func main() {
 	swarmRepo := postgresRepo.NewSwarmRepository(db)
 	swarmUsecase := swarm.NewSwarmUsecase(swarmRepo, redisCache, bcService)
 	swarmHandler := handler.NewSwarmHandler(swarmUsecase, redisCache)
+	blockchainHandler := handler.NewBlockchainHandler(swarmRepo, bcService)
 
 	// Dashboard, Chat & Agent Components
 	dashboardUseCase := dashboard.NewDashboardUseCase(db)
@@ -265,6 +269,7 @@ func main() {
 	agentHandler := handler.NewAgentHandler(agentRepo)
 
 	tenantHandler := handler.NewTenantHandler(db)
+	dataTypeHandler := handler.NewDataTypeHandler(db)
 
 	routes.SetupRoutes(
 		router,
@@ -280,6 +285,8 @@ func main() {
 		chatHandler,
 		agentHandler,
 		tenantHandler,
+		dataTypeHandler,
+		blockchainHandler,
 		authMiddleware,
 	)
 

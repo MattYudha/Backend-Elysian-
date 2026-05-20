@@ -45,7 +45,7 @@ func (u *SwarmUsecase) TriggerSwarm(ctx context.Context, documentID string, item
 		DocumentID:   documentID,
 		DocumentType: "RAPBD",
 		Items:        items,
-		WebhookURL:   "http://host.docker.internal:7777/api/internal/swarm/callback",
+		WebhookURL:   "http://localhost:7777/api/v1/swarm/callback",
 	}
 
 	payloadBytes, err := json.Marshal(payload)
@@ -147,3 +147,8 @@ func (u *SwarmUsecase) updateBlockchainStatus(ctx context.Context, taskID, txHas
 		log.Printf("[Blockchain] failed to update task %s status: %v", taskID, err)
 	}
 }
+
+func (u *SwarmUsecase) GetSwarmTask(ctx context.Context, id string) (*domain.SwarmTask, error) {
+	return u.swarmRepo.GetByID(ctx, id)
+}
+

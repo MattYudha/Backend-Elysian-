@@ -6,6 +6,11 @@ import (
 	"github.com/hibiken/asynq"
 )
 
+type TaskQueue interface {
+	EnqueueTask(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
+	Close() error
+}
+
 type AsynqClient struct {
 	client *asynq.Client
 }
