@@ -17,9 +17,9 @@ import (
 )
 
 type WorkflowUseCase interface {
-	Create(ctx context.Context, userID string, req dto.SaveWorkflowRequest) (*domain.Workflow, error)
+	Create(ctx context.Context, tenantID string, req dto.SaveWorkflowRequest) (*domain.Workflow, error)
 	GetByID(ctx context.Context, id string) (*domain.Workflow, error)
-	List(ctx context.Context, userID string, limit, offset int) ([]*domain.Workflow, int64, error)
+	List(ctx context.Context, tenantID string, limit, offset int) ([]*domain.Workflow, int64, error)
 	Update(ctx context.Context, id string, req dto.SaveWorkflowRequest) (*domain.Workflow, error)
 	Delete(ctx context.Context, id string) error
 	UpdateGraph(ctx context.Context, id string, req dto.SaveWorkflowGraphRequest) error
@@ -43,9 +43,14 @@ func NewWorkflowUseCase(repo repository.WorkflowRepository, docRepo domain.Docum
 	}
 }
 
-func (uc *workflowUseCase) Create(ctx context.Context, userID string, req dto.SaveWorkflowRequest) (*domain.Workflow, error) {
+func (uc *workflowUseCase) Create(ctx context.Context, tenantID string, req dto.SaveWorkflowRequest) (*domain.Workflow, error) {
+	tid, err := uuid.Parse(tenantID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid tenant ID: %w", err)
+	}
+
 	workflow := &domain.Workflow{
-		TenantID: uuid.Nil, // Must be correctly set by context later
+		TenantID: tid,
 		Name:     req.Name,
 		Status:   "draft",
 	}
@@ -61,8 +66,8 @@ func (uc *workflowUseCase) GetByID(ctx context.Context, id string) (*domain.Work
 	return uc.repo.FindByID(ctx, id)
 }
 
-func (uc *workflowUseCase) List(ctx context.Context, userID string, limit, offset int) ([]*domain.Workflow, int64, error) {
-	return uc.repo.List(ctx, userID, limit, offset)
+func (uc *workflowUseCase) List(ctx context.Context, tenantID string, limit, offset int) ([]*domain.Workflow, int64, error) {
+	return uc.repo.List(ctx, tenantID, limit, offset)
 }
 
 func (uc *workflowUseCase) Update(ctx context.Context, id string, req dto.SaveWorkflowRequest) (*domain.Workflow, error) {
@@ -131,6 +136,12 @@ func (uc *workflowUseCase) ExecutePipeline(ctx context.Context, tenantID uuid.UU
 		return nil, err
 	}
 
+	// Update Workflow status to processing
+	if wf, err := uc.repo.FindByID(ctx, version.WorkflowID.String()); err == nil && wf != nil {
+		wf.Status = "processing"
+		_ = uc.repo.Update(ctx, wf)
+	}
+
 	// 4. Inisialisasi Engine & Daftarkan Handlers + Interceptors
 	workflowEngine := engine.NewWorkflowEngine()
 	workflowEngine.Register("llm_agent", handlers.NewLLMAgentHandler())
@@ -160,11 +171,19 @@ func (uc *workflowUseCase) ExecutePipeline(ctx context.Context, tenantID uuid.UU
 	if err != nil {
 		pipeline.Status = "failed"
 		uc.repo.UpdatePipeline(ctx, &pipeline) // Simpan status gagal
+		if wf, err := uc.repo.FindByID(ctx, version.WorkflowID.String()); err == nil && wf != nil {
+			wf.Status = "failed"
+			_ = uc.repo.Update(ctx, wf)
+		}
 		return nil, fmt.Errorf("eksekusi pipeline gagal: %w", err)
 	}
 
 	pipeline.Status = "success"
 	uc.repo.UpdatePipeline(ctx, &pipeline)
+	if wf, err := uc.repo.FindByID(ctx, version.WorkflowID.String()); err == nil && wf != nil {
+		wf.Status = "completed"
+		_ = uc.repo.Update(ctx, wf)
+	}
 
 	return execCtx, nil
 }

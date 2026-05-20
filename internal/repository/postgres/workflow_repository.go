@@ -40,11 +40,11 @@ func (r *workflowRepository) FindByID(ctx context.Context, id string) (*domain.W
 	return &workflow, nil
 }
 
-func (r *workflowRepository) List(ctx context.Context, userID string, limit, offset int) ([]*domain.Workflow, int64, error) {
+func (r *workflowRepository) List(ctx context.Context, tenantID string, limit, offset int) ([]*domain.Workflow, int64, error) {
 	var workflows []*domain.Workflow
 	var total int64
 
-	db := r.db.WithContext(ctx).Model(&domain.Workflow{}).Where("user_id = ?", userID)
+	db := r.db.WithContext(ctx).Model(&domain.Workflow{}).Where("tenant_id = ?", tenantID)
 
 	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, fmt.Errorf("failed to count workflows: %w", err)

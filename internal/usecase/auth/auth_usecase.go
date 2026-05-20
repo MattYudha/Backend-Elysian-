@@ -171,19 +171,10 @@ func (uc *authUseCase) RefreshToken(ctx context.Context, refreshToken string) (*
 		return nil, err
 	}
 
-	newRefreshToken, err := uc.jwtSvc.GenerateRefreshToken(user.ID.String())
-	if err != nil {
-		return nil, err
-	}
-
-	if err := uc.cache.Delete(ctx, refreshKey); err != nil {
-		return nil, err
-	}
-
-	newRefreshKey := uc.keyBuilder.RefreshToken(newRefreshToken)
-	if err := uc.cache.Set(ctx, newRefreshKey, user.ID.String(), 7*time.Hour*24); err != nil {
-		return nil, err
-	}
+	// Disable refresh token rotation for Next.js SSR compatibility.
+	// SSR cannot forward Set-Cookie to the browser, so if we rotate the token here,
+	// the browser's token becomes dead immediately.
+	newRefreshToken := refreshToken
 
 	user.PasswordHash = ""
 

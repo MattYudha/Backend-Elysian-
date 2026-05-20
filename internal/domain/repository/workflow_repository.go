@@ -9,7 +9,7 @@ import (
 type WorkflowRepository interface {
 	Create(ctx context.Context, workflow *domain.Workflow) error
 	FindByID(ctx context.Context, id string) (*domain.Workflow, error)
-	List(ctx context.Context, userID string, limit, offset int) ([]*domain.Workflow, int64, error)
+	List(ctx context.Context, tenantID string, limit, offset int) ([]*domain.Workflow, int64, error)
 	Update(ctx context.Context, workflow *domain.Workflow) error
 	Delete(ctx context.Context, id string) error
 	UpdateGraph(ctx context.Context, workflowID string, configuration []byte) error

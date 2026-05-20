@@ -26,8 +26,8 @@ func main() {
 	}
 	// Defer Close logic if implemented manually, generally GORM manages pool
 
-	// 3. Define Admin User
-	const adminEmail = "admin@gmail.com"
+	// 3. Define Admin Users
+	adminEmails := []string{"admin@gmail.com", "adin@gmail.com"}
 	const adminPasswordRaw = "password"
 
 	// 4. Hash Password
@@ -39,56 +39,45 @@ func main() {
 
 	// 5. Transaction to Seed
 	err = db.Transaction(func(tx *gorm.DB) error {
-		// A. Check if user exists
-		var existingUser domain.User
-		result := tx.Where("email = ?", adminEmail).First(&existingUser)
+		// Cache admin user IDs
+		adminUserIDs := make(map[string]uuid.UUID)
 
-		var userID uuid.UUID
+		for _, email := range adminEmails {
+			var existingUser domain.User
+			result := tx.Where("email = ?", email).First(&existingUser)
 
-		if result.Error == nil {
-			// Update existing
-			log.Printf("User %s exists. Updating password...", adminEmail)
-			userID = existingUser.ID
-			existingUser.PasswordHash = hashedPassword
-			if err := tx.Save(&existingUser).Error; err != nil {
-				return err
-			}
-		} else if result.Error == gorm.ErrRecordNotFound {
-			// Create new
-			log.Printf("Creating new admin user %s...", adminEmail)
-			userID = uuid.New()
-			newUser := domain.User{
-				ID:           userID,
-				FullName:     "Super Admin",
-				Email:        adminEmail,
-				PasswordHash: hashedPassword,
-				CreatedAt:    time.Now(),
-				UpdatedAt:    time.Now(),
-			}
-			if err := tx.Create(&newUser).Error; err != nil {
-				return err
-			}
-		} else {
-			return result.Error
-		}
+			var userID uuid.UUID
 
-		// B. Check/Create Default Tenant
-		var systemTenantID uuid.UUID
-		if err := tx.Raw("SELECT id FROM tenants WHERE name = 'System'").Scan(&systemTenantID).Error; err != nil && err != gorm.ErrRecordNotFound {
-			if systemTenantID == uuid.Nil {
-				systemTenantID = uuid.New()
-				if err := tx.Exec("INSERT INTO tenants (id, name, plan_tier) VALUES (?, 'System', 'enterprise')", systemTenantID).Error; err != nil {
+			if result.Error == nil {
+				// Update existing
+				log.Printf("User %s exists. Updating password...", email)
+				userID = existingUser.ID
+				existingUser.PasswordHash = hashedPassword
+				if err := tx.Save(&existingUser).Error; err != nil {
 					return err
 				}
+			} else if result.Error == gorm.ErrRecordNotFound {
+				// Create new
+				log.Printf("Creating new admin user %s...", email)
+				userID = uuid.New()
+				newUser := domain.User{
+					ID:           userID,
+					FullName:     "Super Admin",
+					Email:        email,
+					PasswordHash: hashedPassword,
+					CreatedAt:    time.Now(),
+					UpdatedAt:    time.Now(),
+				}
+				if err := tx.Create(&newUser).Error; err != nil {
+					return err
+				}
+			} else {
+				return result.Error
 			}
-		} else if systemTenantID == uuid.Nil {
-			systemTenantID = uuid.New()
-			if err := tx.Exec("INSERT INTO tenants (id, name, plan_tier) VALUES (?, 'System', 'enterprise')", systemTenantID).Error; err != nil {
-				return err
-			}
+			adminUserIDs[email] = userID
 		}
 
-		// C. Ensure Role Exists (System level)
+		// B. Ensure Role Exists (System level)
 		var adminRole domain.Role
 		if err := tx.Where("name = ?", "admin").First(&adminRole).Error; err != nil {
 			if err == gorm.ErrRecordNotFound {
@@ -105,21 +94,47 @@ func main() {
 			}
 		}
 
-		// D. Assign Role to User via TenantUser
-		var tenantUser domain.TenantUser
-		if err := tx.Where("tenant_id = ? AND user_id = ? AND role_id = ?", systemTenantID, userID, adminRole.ID).First(&tenantUser).Error; err != nil {
-			if err == gorm.ErrRecordNotFound {
-				log.Println("Assigning 'admin' role to user in System tenant...")
-				tenantUser = domain.TenantUser{
-					TenantID: systemTenantID,
-					UserID:   userID,
-					RoleID:   adminRole.ID,
-				}
-				if err := tx.Create(&tenantUser).Error; err != nil {
+		// C. Check/Create Tenants and Assign Role
+		tenantsToSeed := []string{"System", "Workspace A", "Workspace B"}
+		for _, name := range tenantsToSeed {
+			type TenantTemp struct {
+				ID uuid.UUID
+			}
+			var existingTenant TenantTemp
+			if err := tx.Table("tenants").Select("id").Where("name = ?", name).Limit(1).Scan(&existingTenant).Error; err != nil {
+				return err
+			}
+			
+			var tenantID uuid.UUID
+			if existingTenant.ID == uuid.Nil {
+				tenantID = uuid.New()
+				log.Printf("Creating tenant %s...", name)
+				if err := tx.Exec("INSERT INTO tenants (id, name, plan_tier) VALUES (?, ?, 'enterprise')", tenantID, name).Error; err != nil {
 					return err
 				}
 			} else {
-				return err
+				tenantID = existingTenant.ID
+			}
+
+			// D. Assign Role to User via TenantUser
+			for email, uID := range adminUserIDs {
+				var tenantUser domain.TenantUser
+				if err := tx.Where("tenant_id = ? AND user_id = ? AND role_id = ?", tenantID, uID, adminRole.ID).First(&tenantUser).Error; err != nil {
+					if err == gorm.ErrRecordNotFound {
+						log.Printf("Assigning 'admin' role to user %s in tenant %s...", email, name)
+						tenantUser = domain.TenantUser{
+							TenantID: tenantID,
+							UserID:   uID,
+							RoleID:   adminRole.ID,
+							JoinedAt: time.Now(),
+						}
+						if err := tx.Create(&tenantUser).Error; err != nil {
+							return err
+						}
+					} else {
+						return err
+					}
+				}
 			}
 		}
 

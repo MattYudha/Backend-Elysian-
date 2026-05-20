@@ -22,6 +22,7 @@ func SetupRoutes(
 	dashboardHandler *handler.DashboardHandler,
 	chatHandler *handler.ChatHandler,
 	agentHandler *handler.AgentHandler,
+	tenantHandler *handler.TenantHandler,
 	authMiddleware gin.HandlerFunc,
 ) {
 	// Swagger
@@ -72,6 +73,16 @@ func SetupRoutes(
 						admin.GET("", userHandler.List)
 					}
 				}
+			}
+
+			// Tenants
+			tenants := v1.Group("/tenants")
+			tenants.Use(authMiddleware)
+			{
+				tenants.GET("", tenantHandler.ListMyTenants)
+				tenants.POST("", tenantHandler.CreateTenant)
+				tenants.GET("/:id", tenantHandler.GetByID)
+				tenants.GET("/:id/members", tenantHandler.GetMembers)
 			}
 
 			// Workflows (Strict Multi-Tenancy Enforced)
@@ -129,6 +140,8 @@ func SetupRoutes(
 			{
 				dashboard.GET("/stats", dashboardHandler.GetStats)
 				dashboard.GET("/charts", dashboardHandler.GetChartData)
+				dashboard.GET("/audit-logs", dashboardHandler.GetAuditLogs)
+				dashboard.GET("/priority-queue", dashboardHandler.GetPriorityQueue)
 			}
 
 			// Activity Feed (Strict Multi-Tenancy Enforced)

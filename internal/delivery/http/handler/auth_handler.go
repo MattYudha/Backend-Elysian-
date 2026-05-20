@@ -8,20 +8,55 @@ import (
 	"github.com/Elysian-Rebirth/backend-go/internal/usecase/auth"
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
+	"gorm.io/gorm"
 )
 
 type AuthHandler struct {
 	authUseCase  auth.AuthUseCase
 	validate     *validator.Validate
 	isProduction bool
+	db           *gorm.DB
 }
 
-func NewAuthHandler(authUseCase auth.AuthUseCase, isProduction bool) *AuthHandler {
+func NewAuthHandler(authUseCase auth.AuthUseCase, isProduction bool, db ...*gorm.DB) *AuthHandler {
+	var database *gorm.DB
+	if len(db) > 0 {
+		database = db[0]
+	}
 	return &AuthHandler{
 		authUseCase:  authUseCase,
 		validate:     validator.New(),
 		isProduction: isProduction,
+		db:           database,
 	}
+}
+
+// getUserRole fetches the highest role name for a user across all their tenants
+func (h *AuthHandler) getUserRole(userID string) string {
+	if h.db == nil {
+		return "viewer"
+	}
+	type RoleResult struct {
+		Name string
+	}
+	var result RoleResult
+	// Priority: admin > manager > viewer
+	err := h.db.Raw(`
+		SELECT r.name FROM roles r
+		JOIN tenant_users tu ON tu.role_id = r.id
+		WHERE tu.user_id = ?
+		ORDER BY CASE r.name
+			WHEN 'admin' THEN 1
+			WHEN 'super_admin' THEN 1
+			WHEN 'manager' THEN 2
+			ELSE 3
+		END
+		LIMIT 1
+	`, userID).Scan(&result).Error
+	if err != nil || result.Name == "" {
+		return "viewer"
+	}
+	return result.Name
 }
 
 // Request and Response structs
@@ -71,13 +106,19 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	h.setRefreshTokenCookie(c, res.RefreshToken)
 
-	h.setRefreshTokenCookie(c, res.RefreshToken)
+	role := h.getUserRole(res.User.ID.String())
 
 	c.JSON(http.StatusCreated, gin.H{
 		"status": "success",
 		"data": gin.H{
 			"access_token": res.AccessToken,
-			"user":         res.User,
+			"user": gin.H{
+				"id":         res.User.ID,
+				"email":      res.User.Email,
+				"full_name":  res.User.FullName,
+				"avatar_url": res.User.AvatarURL,
+				"role":       role,
+			},
 		},
 	})
 }
@@ -109,13 +150,19 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	h.setRefreshTokenCookie(c, res.RefreshToken)
 
-	h.setRefreshTokenCookie(c, res.RefreshToken)
+	role := h.getUserRole(res.User.ID.String())
 
 	c.JSON(http.StatusOK, gin.H{
 		"status": "success",
 		"data": gin.H{
 			"access_token": res.AccessToken,
-			"user":         res.User,
+			"user": gin.H{
+				"id":         res.User.ID,
+				"email":      res.User.Email,
+				"full_name":  res.User.FullName,
+				"avatar_url": res.User.AvatarURL,
+				"role":       role,
+			},
 		},
 	})
 }
@@ -151,6 +198,8 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 
 	res, err := h.authUseCase.RefreshToken(c.Request.Context(), refreshToken)
 	if err != nil {
+		// Clear the stale cookie so the browser stops retrying with it
+		c.SetCookie("refresh_token", "", -1, "/", "", h.isProduction, true)
 		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "Invalid or expired refresh token"})
 		return
 	}
@@ -159,11 +208,19 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		h.setRefreshTokenCookie(c, res.RefreshToken)
 	}
 
+	role := h.getUserRole(res.User.ID.String())
+
 	c.JSON(http.StatusOK, gin.H{
 		"status": "success",
 		"data": gin.H{
 			"access_token": res.AccessToken,
-			"user":         res.User,
+			"user": gin.H{
+				"id":         res.User.ID,
+				"email":      res.User.Email,
+				"full_name":  res.User.FullName,
+				"avatar_url": res.User.AvatarURL,
+				"role":       role,
+			},
 		},
 	})
 }

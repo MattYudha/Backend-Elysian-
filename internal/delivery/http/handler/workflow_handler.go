@@ -22,12 +22,12 @@ func NewWorkflowHandler(useCase workflow.WorkflowUseCase) *WorkflowHandler {
 
 // List Workflows
 func (h *WorkflowHandler) List(c *gin.Context) {
-	user := middleware.MustGetUserFromContext(c)
+	tenantID := middleware.MustGetTenantIDFromContext(c)
 
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
 	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
 
-	workflows, total, err := h.useCase.List(c.Request.Context(), user.ID.String(), limit, offset)
+	workflows, total, err := h.useCase.List(c.Request.Context(), tenantID, limit, offset)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 		return
@@ -45,7 +45,7 @@ func (h *WorkflowHandler) List(c *gin.Context) {
 
 // Create Workflow
 func (h *WorkflowHandler) Create(c *gin.Context) {
-	user := middleware.MustGetUserFromContext(c)
+	tenantID := middleware.MustGetTenantIDFromContext(c)
 	var req dto.SaveWorkflowRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -53,7 +53,7 @@ func (h *WorkflowHandler) Create(c *gin.Context) {
 		return
 	}
 
-	wf, err := h.useCase.Create(c.Request.Context(), user.ID.String(), req)
+	wf, err := h.useCase.Create(c.Request.Context(), tenantID, req)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
 		return

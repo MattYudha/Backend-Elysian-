@@ -143,7 +143,7 @@ func main() {
 			return false
 		},
 		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Requested-With", "Accept"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Requested-With", "Accept", "X-Tenant-ID", "X-XSRF-TOKEN", "X-CSRF-Token"},
 		ExposeHeaders:    []string{"Content-Length", "Authorization"},
 		AllowCredentials: true, // hardcoded — required for login session
 		MaxAge:           12 * time.Hour,
@@ -158,7 +158,7 @@ func main() {
 
 	healthHandler := handler.NewHealthHandler(cfg, db, redisCache)
 	userHandler := handler.NewUserHandler(userRepo)
-	authHandler := handler.NewAuthHandler(authUseCase, cfg.IsProduction())
+	authHandler := handler.NewAuthHandler(authUseCase, cfg.IsProduction(), db)
 
 	// Workflow Components
 	workflowRepo := postgresRepo.NewWorkflowRepository(db)
@@ -258,6 +258,8 @@ func main() {
 	agentRepo := postgresRepo.NewAgentRepository(db)
 	agentHandler := handler.NewAgentHandler(agentRepo)
 
+	tenantHandler := handler.NewTenantHandler(db)
+
 	routes.SetupRoutes(
 		router,
 		healthHandler,
@@ -271,6 +273,7 @@ func main() {
 		dashboardHandler,
 		chatHandler,
 		agentHandler,
+		tenantHandler,
 		authMiddleware,
 	)
 
