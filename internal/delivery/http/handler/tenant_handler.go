@@ -68,7 +68,7 @@ func (h *TenantHandler) ListMyTenants(c *gin.Context) {
 		return
 	}
 
-	var data []TenantJSONResponse
+	data := []TenantJSONResponse{}
 	for _, t := range tenants {
 		data = append(data, ToTenantJSON(t))
 	}
