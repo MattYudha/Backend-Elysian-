@@ -95,6 +95,7 @@ func SetupRoutes(
 				workflows.PATCH("/:id", workflowHandler.Update)          // Metadata update
 				workflows.PUT("/:id/graph", workflowHandler.UpdateGraph) // Canonical Graph update
 				workflows.DELETE("/:id", workflowHandler.Delete)
+				workflows.POST("/:id/publish", workflowHandler.Publish)
 
 				// Execution Trigger
 				workflows.POST("/:id/execute", executionHandler.Execute)

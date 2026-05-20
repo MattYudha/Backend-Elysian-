@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/Elysian-Rebirth/backend-go/internal/delivery/http/dto"
@@ -62,7 +64,7 @@ func (h *WorkflowHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"status": "success", "data": wf})
 }
 
-// Get Workflow Details
+// Get Workflow Details (with latest graph)
 func (h *WorkflowHandler) Get(c *gin.Context) {
 	id := c.Param("id")
 
@@ -72,18 +74,34 @@ func (h *WorkflowHandler) Get(c *gin.Context) {
 		return
 	}
 
-	// Stub responses until WorkflowVersion is connected to frontend DTO
+	// Fetch the latest version (draft or published) to get the graph
+	latestVersion, err := h.useCase.GetLatestVersion(c.Request.Context(), id)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to fetch workflow version"})
+		return
+	}
+
+	graph := dto.ReactFlowGraphDTO{
+		Nodes: []dto.ReactFlowNodeDTO{},
+		Edges: []dto.ReactFlowEdgeDTO{},
+	}
+
+	if latestVersion != nil && len(latestVersion.Configuration) > 0 {
+		var savedGraph dto.SaveWorkflowGraphRequest
+		if jsonErr := json.Unmarshal(latestVersion.Configuration, &savedGraph); jsonErr == nil {
+			graph.Nodes = savedGraph.Nodes
+			graph.Edges = savedGraph.Edges
+		}
+	}
+
 	response := dto.WorkflowResponse{
 		ID:          wf.ID.String(),
 		Name:        wf.Name,
 		Description: "",
 		Status:      string(wf.Status),
-		Graph: dto.ReactFlowGraphDTO{
-			Nodes: []dto.ReactFlowNodeDTO{},
-			Edges: []dto.ReactFlowEdgeDTO{},
-		},
-		CreatedAt: wf.CreatedAt.Format(time.RFC3339),
-		UpdatedAt: wf.CreatedAt.Format(time.RFC3339),
+		Graph:       graph,
+		CreatedAt:   wf.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:   wf.CreatedAt.Format(time.RFC3339),
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "success", "data": response})
@@ -169,5 +187,29 @@ func (h *WorkflowHandler) ExecutePipeline(c *gin.Context) {
 		"status":  "success",
 		"message": "DAG Pipeline executed successfully",
 		"context": execCtx.Payload,
+	})
+}
+
+// PublishWorkflow validates the DAG and promotes the draft to a published (immutable) version.
+func (h *WorkflowHandler) Publish(c *gin.Context) {
+	id := c.Param("id")
+
+	if err := h.useCase.PublishWorkflow(c.Request.Context(), id); err != nil {
+		errMsg := err.Error()
+		if strings.Contains(errMsg, "no draft") {
+			c.JSON(http.StatusBadRequest, ErrorResponse{Error: errMsg})
+			return
+		}
+		if strings.Contains(errMsg, "cycle") {
+			c.JSON(http.StatusUnprocessableEntity, ErrorResponse{Error: errMsg})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: errMsg})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": "Workflow published successfully",
 	})
 }

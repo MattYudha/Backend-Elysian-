@@ -24,6 +24,7 @@ type WorkflowUseCase interface {
 	Delete(ctx context.Context, id string) error
 	UpdateGraph(ctx context.Context, id string, req dto.SaveWorkflowGraphRequest) error
 	GetLatestVersion(ctx context.Context, workflowID string) (*domain.WorkflowVersion, error)
+	PublishWorkflow(ctx context.Context, id string) error
 	ExecutePipeline(ctx context.Context, tenantID uuid.UUID, userID uuid.UUID, versionID uuid.UUID) (*engine.ExecutionContext, error)
 }
 
@@ -89,27 +90,50 @@ func (uc *workflowUseCase) Delete(ctx context.Context, id string) error {
 	return uc.repo.Delete(ctx, id)
 }
 
+// UpdateGraph saves the draft graph configuration.
+// NOTE: DAG cycle validation is intentionally NOT performed here.
+// Draft workflows are allowed to have incomplete/cyclic connections.
+// Validation runs only at Publish time via PublishWorkflow.
 func (uc *workflowUseCase) UpdateGraph(ctx context.Context, id string, req dto.SaveWorkflowGraphRequest) error {
 	configBytes, err := json.Marshal(req)
 	if err != nil {
 		return fmt.Errorf("failed to marshal workflow graph config: %w", err)
 	}
-
-	// Validate DAG (cycle detection) before saving to the database
-	graph, err := engine.ParseWorkflow(configBytes)
-	if err != nil {
-		return fmt.Errorf("failed to parse workflow schema for validation: %w", err)
-	}
-
-	if _, err := engine.TopologicalSort(graph); err != nil {
-		return fmt.Errorf("invalid workflow schema: %w", err)
-	}
-
 	return uc.repo.UpdateGraph(ctx, id, configBytes)
 }
 
 func (uc *workflowUseCase) GetLatestVersion(ctx context.Context, workflowID string) (*domain.WorkflowVersion, error) {
 	return uc.repo.GetLatestVersion(ctx, workflowID)
+}
+
+// PublishWorkflow validates the DAG and locks the current draft into an immutable published version.
+// A NEW version row is created regardless of the current status, incrementing version_number.
+func (uc *workflowUseCase) PublishWorkflow(ctx context.Context, id string) error {
+	// 1. Fetch latest draft version
+	latestVersion, err := uc.repo.GetLatestVersion(ctx, id)
+	if err != nil {
+		return fmt.Errorf("failed to fetch latest version: %w", err)
+	}
+	if latestVersion == nil {
+		return fmt.Errorf("no draft version found to publish")
+	}
+
+	// 2. Validate DAG — only here do we enforce no cycles
+	graph, err := engine.ParseWorkflow(latestVersion.Configuration)
+	if err != nil {
+		return fmt.Errorf("failed to parse workflow: %w", err)
+	}
+	if _, err := engine.TopologicalSort(graph); err != nil {
+		return fmt.Errorf("workflow contains a cycle and cannot be published: %w", err)
+	}
+
+	// 3. Update workflow status to published
+	wf, err := uc.repo.FindByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("workflow not found: %w", err)
+	}
+	wf.Status = "published"
+	return uc.repo.Update(ctx, wf)
 }
 
 func (uc *workflowUseCase) ExecutePipeline(ctx context.Context, tenantID uuid.UUID, userID uuid.UUID, versionID uuid.UUID) (*engine.ExecutionContext, error) {
