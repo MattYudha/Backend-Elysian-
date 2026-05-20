@@ -95,6 +95,12 @@ func main() {
 			log.Fatalf("Failed to ensure database partitions: %v", err)
 		}
 		log.Printf("Database partitions verified")
+
+		// Seed administrator accounts and default roles
+		if err := database.SeedAdmin(db); err != nil {
+			log.Fatalf("Failed to seed admin accounts: %v", err)
+		}
+		log.Printf("Database admin seed completed successfully")
 	} else {
 		log.Fatalf("Failed to get DB instance for goose: %v", err)
 	}
