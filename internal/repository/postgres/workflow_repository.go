@@ -52,7 +52,7 @@ func (r *workflowRepository) List(ctx context.Context, tenantID string, limit, o
 
 	err := db.Limit(limit).
 		Offset(offset).
-		Order("updated_at DESC").
+		Order("created_at DESC").
 		Find(&workflows).Error
 
 	if err != nil {
