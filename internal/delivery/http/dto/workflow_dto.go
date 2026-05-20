@@ -31,8 +31,8 @@ type SaveWorkflowRequest struct {
 }
 
 type SaveWorkflowGraphRequest struct {
-	Nodes []ReactFlowNodeDTO `json:"nodes" binding:"required"`
-	Edges []ReactFlowEdgeDTO `json:"edges" binding:"required"`
+	Nodes []ReactFlowNodeDTO `json:"nodes"`
+	Edges []ReactFlowEdgeDTO `json:"edges"`
 }
 
 type WorkflowResponse struct {
