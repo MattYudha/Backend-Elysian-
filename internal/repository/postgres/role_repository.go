@@ -163,6 +163,10 @@ func (r *RoleRepository) RemoveFromUser(ctx context.Context, tenantID, userID, r
 }
 
 func (r *RoleRepository) GetUserRoles(ctx context.Context, tenantID, userID string) ([]*domain.Role, error) {
+	if tenantID == "" || userID == "" {
+		return []*domain.Role{}, nil
+	}
+
 	var roles []*domain.Role
 
 	err := r.db.WithContext(ctx).
