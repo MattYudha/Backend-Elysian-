@@ -9,6 +9,8 @@ import (
 	"github.com/Elysian-Rebirth/backend-go/internal/domain/repository"
 	"github.com/Elysian-Rebirth/backend-go/internal/middleware"
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
+	"gorm.io/datatypes"
 )
 
 type UserHandler struct {
@@ -223,4 +225,96 @@ func (h *UserHandler) DeleteMe(c *gin.Context) {
 	c.JSON(http.StatusOK, SuccessResponse{
 		Message: "Account deleted successfully",
 	})
+}
+
+type UpdatePasswordRequest struct {
+	CurrentPassword string `json:"current_password" binding:"required"`
+	NewPassword     string `json:"new_password" binding:"required" validate:"min=8"`
+}
+
+func (h *UserHandler) UpdatePassword(c *gin.Context) {
+	user := middleware.MustGetUserFromContext(c)
+
+	var req UpdatePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	freshUser, err := h.userRepo.FindByID(c.Request.Context(), user.ID.String())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to fetch user profile"})
+		return
+	}
+
+	err = bcrypt.CompareHashAndPassword([]byte(freshUser.PasswordHash), []byte(req.CurrentPassword))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, ErrorResponse{Error: "Incorrect current password"})
+		return
+	}
+
+	newHash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to hash new password"})
+		return
+	}
+
+	freshUser.PasswordHash = string(newHash)
+	if err := h.userRepo.Update(c.Request.Context(), freshUser); err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: "Failed to update password"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "message": "Password updated successfully"})
+}
+
+func (h *UserHandler) GetPreferences(c *gin.Context) {
+	user := middleware.MustGetUserFromContext(c)
+
+	prefs, err := h.userRepo.GetPreferences(c.Request.Context(), user.ID.String())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "data": prefs})
+}
+
+type UpdatePreferencesRequest struct {
+	Appearance       string         `json:"appearance"`
+	Notifications    datatypes.JSON `json:"notifications"`
+	SecuritySettings datatypes.JSON `json:"security_settings"`
+}
+
+func (h *UserHandler) UpdatePreferences(c *gin.Context) {
+	user := middleware.MustGetUserFromContext(c)
+
+	var req UpdatePreferencesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	prefs, err := h.userRepo.GetPreferences(c.Request.Context(), user.ID.String())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	if req.Appearance != "" {
+		prefs.Appearance = req.Appearance
+	}
+	if req.Notifications != nil {
+		prefs.NotificationsJSON = req.Notifications
+	}
+	if req.SecuritySettings != nil {
+		prefs.SecuritySettingsJSON = req.SecuritySettings
+	}
+
+	if err := h.userRepo.UpdatePreferences(c.Request.Context(), prefs); err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success", "data": prefs})
 }

@@ -163,7 +163,21 @@ func GetUserRolesFromContext(c *gin.Context) ([]*domain.Role, bool) {
 }
 
 // MustGetTenantIDFromContext reads X-Tenant-ID from the request header.
-// Returns an empty string if the header is absent (not fatal for optional-tenant routes).
 func MustGetTenantIDFromContext(c *gin.Context) string {
 	return c.GetHeader("X-Tenant-ID")
+}
+
+// TenantMiddleware enforces that X-Tenant-ID header is present.
+func TenantMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		tenantID := c.GetHeader("X-Tenant-ID")
+		if tenantID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "X-Tenant-ID header is required",
+			})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
 }

@@ -15,6 +15,7 @@ type WorkflowRepository interface {
 	UpdateGraph(ctx context.Context, workflowID string, configuration []byte) error
 
 	GetVersionByID(ctx context.Context, versionID string) (*domain.WorkflowVersion, error)
+	GetLatestVersion(ctx context.Context, workflowID string) (*domain.WorkflowVersion, error)
 	CreatePipeline(ctx context.Context, pipeline *domain.Pipeline) error
 	UpdatePipeline(ctx context.Context, pipeline *domain.Pipeline) error
 }

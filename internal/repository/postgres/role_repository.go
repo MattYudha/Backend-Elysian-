@@ -131,7 +131,7 @@ func (r *RoleRepository) AssignToUser(ctx context.Context, tenantID, userID, rol
 	tenantUser := &domain.TenantUser{
 		TenantID: tID,
 		UserID:   uID,
-		RoleID:   &rID,
+		RoleID:   rID,
 	}
 
 	if err := r.db.WithContext(ctx).Create(tenantUser).Error; err != nil {

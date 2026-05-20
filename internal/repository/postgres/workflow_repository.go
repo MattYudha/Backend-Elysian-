@@ -81,10 +81,59 @@ func (r *workflowRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// UpdateGraph is deprecated in the new versioning system. Replaced by WorkflowVersion.
-// This is a stub to satisfy interfaces until the DAG engine is rebuilt.
 func (r *workflowRepository) UpdateGraph(ctx context.Context, workflowID string, configuration []byte) error {
-	return fmt.Errorf("Not Implemented: DAG Engine requires WorkflowVersion")
+	var wf domain.Workflow
+	if err := r.db.WithContext(ctx).Where("id = ?", workflowID).First(&wf).Error; err != nil {
+		return fmt.Errorf("workflow not found: %w", err)
+	}
+
+	var latestVersion domain.WorkflowVersion
+	err := r.db.WithContext(ctx).
+		Where("workflow_id = ?", workflowID).
+		Order("version_number DESC").
+		First(&latestVersion).Error
+
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		// Create first version (version 1)
+		v := &domain.WorkflowVersion{
+			WorkflowID:    wf.ID,
+			VersionNumber: 1,
+			Configuration: configuration,
+		}
+		return r.db.WithContext(ctx).Create(v).Error
+	} else if err != nil {
+		return fmt.Errorf("failed to check latest version: %w", err)
+	}
+
+	// If workflow is active/published/running, create a new version incremented
+	if wf.Status == "active" || wf.Status == "published" || wf.Status == "running" || wf.Status == "completed" {
+		v := &domain.WorkflowVersion{
+			WorkflowID:    wf.ID,
+			VersionNumber: latestVersion.VersionNumber + 1,
+			Configuration: configuration,
+		}
+		return r.db.WithContext(ctx).Create(v).Error
+	}
+
+	// Otherwise, overwrite the latest version (which is a draft)
+	latestVersion.Configuration = configuration
+	return r.db.WithContext(ctx).Save(&latestVersion).Error
+}
+
+func (r *workflowRepository) GetLatestVersion(ctx context.Context, workflowID string) (*domain.WorkflowVersion, error) {
+	var version domain.WorkflowVersion
+	err := r.db.WithContext(ctx).
+		Where("workflow_id = ?", workflowID).
+		Order("version_number DESC").
+		First(&version).Error
+
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil // No version exists yet
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get latest version: %w", err)
+	}
+	return &version, nil
 }
 
 func (r *workflowRepository) GetVersionByID(ctx context.Context, versionID string) (*domain.WorkflowVersion, error) {

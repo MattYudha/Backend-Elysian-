@@ -113,7 +113,7 @@ func main() {
 				tenantUser = domain.TenantUser{
 					TenantID: systemTenantID,
 					UserID:   userID,
-					RoleID:   &adminRole.ID,
+					RoleID:   adminRole.ID,
 				}
 				if err := tx.Create(&tenantUser).Error; err != nil {
 					return err

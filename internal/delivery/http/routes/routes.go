@@ -19,6 +19,9 @@ func SetupRoutes(
 	documentHandler *handler.DocumentHandler,
 	ragSearchHandler *handler.RAGSearchHandler,
 	swarmHandler *handler.SwarmHandler,
+	dashboardHandler *handler.DashboardHandler,
+	chatHandler *handler.ChatHandler,
+	agentHandler *handler.AgentHandler,
 	authMiddleware gin.HandlerFunc,
 ) {
 	// Swagger
@@ -55,9 +58,12 @@ func SetupRoutes(
 				protected := users.Group("")
 				protected.Use(authMiddleware) // Apply auth middleware
 				{
-					protected.GET("/me", userHandler.GetMe)       // Get current user
-					protected.PUT("/me", userHandler.UpdateMe)    // Update current user
-					protected.DELETE("/me", userHandler.DeleteMe) // Delete current user
+					protected.GET("/me", userHandler.GetMe)
+					protected.PUT("/me", userHandler.UpdateMe)
+					protected.DELETE("/me", userHandler.DeleteMe)
+					protected.PUT("/me/password", userHandler.UpdatePassword)
+					protected.GET("/me/preferences", userHandler.GetPreferences)
+					protected.PUT("/me/preferences", userHandler.UpdatePreferences)
 
 					// Admin only routes
 					admin := protected.Group("")
@@ -68,9 +74,9 @@ func SetupRoutes(
 				}
 			}
 
-			// Workflows
+			// Workflows (Strict Multi-Tenancy Enforced)
 			workflows := v1.Group("/workflows")
-			workflows.Use(authMiddleware)
+			workflows.Use(authMiddleware, middleware.TenantMiddleware())
 			{
 				workflows.GET("", workflowHandler.List)
 				workflows.POST("", workflowHandler.Create)
@@ -79,45 +85,77 @@ func SetupRoutes(
 				workflows.PUT("/:id/graph", workflowHandler.UpdateGraph) // Canonical Graph update
 				workflows.DELETE("/:id", workflowHandler.Delete)
 
-				// Execution Trigger (legacy)
+				// Execution Trigger
 				workflows.POST("/:id/execute", executionHandler.Execute)
 
-				// DAG Pipeline Execute (New Engine)
+				// DAG Pipeline Execute
 				workflows.POST("/versions/:versionId/execute", workflowHandler.ExecutePipeline)
 			}
 
-			// Executions (Global or specific)
+			// Executions (Strict Multi-Tenancy Enforced)
 			executions := v1.Group("/executions")
-			executions.Use(authMiddleware)
+			executions.Use(authMiddleware, middleware.TenantMiddleware())
 			{
 				executions.GET("/:id", executionHandler.Get)
 				executions.GET("", executionHandler.List)
 			}
 
-			// Documents (Knowledge Base RAG)
+			// Documents (Strict Multi-Tenancy Enforced)
 			docs := v1.Group("/documents")
-			docs.Use(authMiddleware)
+			docs.Use(authMiddleware, middleware.TenantMiddleware())
 			{
-				docs.GET("/presign", documentHandler.Presign)        // Step 1: Get upload URL
-				docs.POST("/confirm", documentHandler.ConfirmUpload) // Step 2: Confirm upload
-				docs.GET("", documentHandler.List)                   // List all docs
-				docs.POST("/search", ragSearchHandler.Search)        // Hybrid RAG search (HNSW+FTS+RRF)
+				docs.GET("/presign", documentHandler.Presign)
+				docs.POST("/confirm", documentHandler.ConfirmUpload)
+				docs.GET("", documentHandler.List)
+				docs.POST("/search", ragSearchHandler.Search)
 			}
 
-			// Swarm Integrations
+			// Swarm (Strict Multi-Tenancy Enforced for Trigger)
 			swarm := v1.Group("/swarm")
 			{
-				// Internal callback does not use authMiddleware
 				swarm.POST("/callback", swarmHandler.Callback)
-				
-				// SSE Endpoint (auth might be needed depending on implementation, but kept open for hackathon or handled via token in query)
 				swarm.GET("/events", swarmHandler.StreamEvents)
-				
+
 				protectedSwarm := swarm.Group("")
-				protectedSwarm.Use(authMiddleware)
+				protectedSwarm.Use(authMiddleware, middleware.TenantMiddleware())
 				{
 					protectedSwarm.POST("/upload", swarmHandler.Trigger)
 				}
+			}
+
+			// Dashboard (Strict Multi-Tenancy Enforced)
+			dashboard := v1.Group("/dashboard")
+			dashboard.Use(authMiddleware, middleware.TenantMiddleware())
+			{
+				dashboard.GET("/stats", dashboardHandler.GetStats)
+				dashboard.GET("/charts", dashboardHandler.GetChartData)
+			}
+
+			// Activity Feed (Strict Multi-Tenancy Enforced)
+			v1.GET("/activity", authMiddleware, middleware.TenantMiddleware(), dashboardHandler.GetActivityFeed)
+
+			// Chat (Strict Multi-Tenancy Enforced)
+			chat := v1.Group("/chat")
+			chat.Use(authMiddleware, middleware.TenantMiddleware())
+			{
+				chat.POST("/sessions", chatHandler.CreateSession)
+				chat.GET("/sessions", chatHandler.ListSessions)
+				chat.DELETE("/sessions/:id", chatHandler.DeleteSession)
+				chat.GET("/sessions/:id/messages", chatHandler.GetMessages)
+				chat.POST("/sessions/:id/messages", chatHandler.SendMessage)
+			}
+
+			// Agent (Strict Multi-Tenancy Enforced)
+			agents := v1.Group("/agents")
+			agents.Use(authMiddleware, middleware.TenantMiddleware())
+			{
+				agents.GET("", agentHandler.ListAgents)
+				agents.POST("", agentHandler.CreateAgent)
+				agents.GET("/:id", agentHandler.GetAgent)
+				agents.PUT("/:id", agentHandler.UpdateAgent)
+				agents.DELETE("/:id", agentHandler.DeleteAgent)
+				agents.POST("/:id/skills", agentHandler.CreateSkill)
+				agents.DELETE("/:id/skills/:skillId", agentHandler.DeleteSkill)
 			}
 		}
 	}

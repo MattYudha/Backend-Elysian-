@@ -40,10 +40,27 @@ func NewPostgresDB(cfg *config.Config) (*gorm.DB, error) {
 		return nil, fmt.Errorf("failed to get database instance: %w", err)
 	}
 
-	sqlDB.SetMaxOpenConns(cfg.Database.MaxOpenConns)
-	sqlDB.SetMaxIdleConns(cfg.Database.MaxIdleConns)
-	sqlDB.SetConnMaxLifetime(cfg.Database.ConnMaxLifetime)
-	sqlDB.SetConnMaxIdleTime(cfg.Database.ConnMaxIdleTime)
+	maxOpen := cfg.Database.MaxOpenConns
+	if maxOpen <= 0 {
+		maxOpen = 50
+	}
+	maxIdle := cfg.Database.MaxIdleConns
+	if maxIdle <= 0 {
+		maxIdle = 10
+	}
+	sqlDB.SetMaxOpenConns(maxOpen)
+	sqlDB.SetMaxIdleConns(maxIdle)
+
+	maxLifetime := cfg.Database.ConnMaxLifetime
+	if maxLifetime <= 0 {
+		maxLifetime = 15 * time.Minute
+	}
+	maxIdleTime := cfg.Database.ConnMaxIdleTime
+	if maxIdleTime <= 0 {
+		maxIdleTime = 5 * time.Minute
+	}
+	sqlDB.SetConnMaxLifetime(maxLifetime)
+	sqlDB.SetConnMaxIdleTime(maxIdleTime)
 
 	if err := sqlDB.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
@@ -66,4 +83,39 @@ func Close(db *gorm.DB) error {
 		return err
 	}
 	return sqlDB.Close()
+}
+
+// EnsurePartitions automatically creates partition tables for partitioned tables
+// for the current month and the next month to avoid GORM write failures on range constraints.
+func EnsurePartitions(db *gorm.DB) error {
+	now := time.Now().UTC()
+	
+	// Create partitions for current month and next month
+	months := []time.Time{
+		time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC),
+		time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, time.UTC).AddDate(0, 1, 0),
+	}
+
+	tables := []string{"token_usage_ledgers", "chat_messages", "enterprise_audit_logs"}
+
+	for _, t := range months {
+		year := t.Year()
+		month := int(t.Month())
+		
+		startDate := t.Format("2006-01-02")
+		endDate := t.AddDate(0, 1, 0).Format("2006-01-02")
+
+		for _, table := range tables {
+			partitionName := fmt.Sprintf("%s_y%04dm%02d", table, year, month)
+			query := fmt.Sprintf(
+				"CREATE TABLE IF NOT EXISTS %s PARTITION OF %s FOR VALUES FROM ('%s') TO ('%s')",
+				partitionName, table, startDate, endDate,
+			)
+			log.Printf("Ensuring partition: %s", partitionName)
+			if err := db.Exec(query).Error; err != nil {
+				return fmt.Errorf("failed to create partition %s: %w", partitionName, err)
+			}
+		}
+	}
+	return nil
 }

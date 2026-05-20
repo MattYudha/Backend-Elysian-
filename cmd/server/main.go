@@ -28,6 +28,7 @@ import (
 	"github.com/Elysian-Rebirth/backend-go/internal/middleware"
 	postgresRepo "github.com/Elysian-Rebirth/backend-go/internal/repository/postgres"
 	"github.com/Elysian-Rebirth/backend-go/internal/usecase/auth"
+	"github.com/Elysian-Rebirth/backend-go/internal/usecase/dashboard"
 	documentUsecase "github.com/Elysian-Rebirth/backend-go/internal/usecase/document"
 	"github.com/Elysian-Rebirth/backend-go/internal/usecase/engine"
 	"github.com/Elysian-Rebirth/backend-go/internal/usecase/rag"
@@ -89,6 +90,11 @@ func main() {
 			log.Fatalf("Goose up failed: %v", err)
 		}
 		log.Printf("Database migrations applied successfully")
+		
+		if err := database.EnsurePartitions(db); err != nil {
+			log.Fatalf("Failed to ensure database partitions: %v", err)
+		}
+		log.Printf("Database partitions verified")
 	} else {
 		log.Fatalf("Failed to get DB instance for goose: %v", err)
 	}
@@ -242,7 +248,31 @@ func main() {
 	swarmUsecase := swarm.NewSwarmUsecase(swarmRepo, redisCache, bcService)
 	swarmHandler := handler.NewSwarmHandler(swarmUsecase, redisCache)
 
-	routes.SetupRoutes(router, healthHandler, userHandler, authHandler, workflowHandler, executionHandler, documentHandler, ragSearchHandler, swarmHandler, authMiddleware)
+	// Dashboard, Chat & Agent Components
+	dashboardUseCase := dashboard.NewDashboardUseCase(db)
+	dashboardHandler := handler.NewDashboardHandler(dashboardUseCase)
+
+	chatRepo := postgresRepo.NewChatRepository(db)
+	chatHandler := handler.NewChatHandler(chatRepo, docRepo, cfg.AI.GeminiAPIKey)
+
+	agentRepo := postgresRepo.NewAgentRepository(db)
+	agentHandler := handler.NewAgentHandler(agentRepo)
+
+	routes.SetupRoutes(
+		router,
+		healthHandler,
+		userHandler,
+		authHandler,
+		workflowHandler,
+		executionHandler,
+		documentHandler,
+		ragSearchHandler,
+		swarmHandler,
+		dashboardHandler,
+		chatHandler,
+		agentHandler,
+		authMiddleware,
+	)
 
 	addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
 	srv := &http.Server{

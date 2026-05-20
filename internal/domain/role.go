@@ -15,8 +15,8 @@ type Role struct {
 }
 
 type TenantUser struct {
-	TenantID uuid.UUID  `gorm:"type:uuid;primaryKey" json:"tenant_id"`
-	UserID   uuid.UUID  `gorm:"type:uuid;primaryKey" json:"user_id"`
-	RoleID   *uuid.UUID `gorm:"type:uuid" json:"role_id"`
-	JoinedAt time.Time  `json:"joined_at"`
+	TenantID uuid.UUID `gorm:"type:uuid;primaryKey" json:"tenant_id"`
+	UserID   uuid.UUID `gorm:"type:uuid;primaryKey" json:"user_id"`
+	RoleID   uuid.UUID `gorm:"type:uuid;not null" json:"role_id"`
+	JoinedAt time.Time `json:"joined_at"`
 }

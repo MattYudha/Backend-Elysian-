@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"time"
@@ -22,6 +23,7 @@ type WorkflowUseCase interface {
 	Update(ctx context.Context, id string, req dto.SaveWorkflowRequest) (*domain.Workflow, error)
 	Delete(ctx context.Context, id string) error
 	UpdateGraph(ctx context.Context, id string, req dto.SaveWorkflowGraphRequest) error
+	GetLatestVersion(ctx context.Context, workflowID string) (*domain.WorkflowVersion, error)
 	ExecutePipeline(ctx context.Context, tenantID uuid.UUID, userID uuid.UUID, versionID uuid.UUID) (*engine.ExecutionContext, error)
 }
 
@@ -83,8 +85,26 @@ func (uc *workflowUseCase) Delete(ctx context.Context, id string) error {
 }
 
 func (uc *workflowUseCase) UpdateGraph(ctx context.Context, id string, req dto.SaveWorkflowGraphRequest) error {
-	// 3. Call Repo Transaction
-	return uc.repo.UpdateGraph(ctx, id, []byte{})
+	configBytes, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("failed to marshal workflow graph config: %w", err)
+	}
+
+	// Validate DAG (cycle detection) before saving to the database
+	graph, err := engine.ParseWorkflow(configBytes)
+	if err != nil {
+		return fmt.Errorf("failed to parse workflow schema for validation: %w", err)
+	}
+
+	if _, err := engine.TopologicalSort(graph); err != nil {
+		return fmt.Errorf("invalid workflow schema: %w", err)
+	}
+
+	return uc.repo.UpdateGraph(ctx, id, configBytes)
+}
+
+func (uc *workflowUseCase) GetLatestVersion(ctx context.Context, workflowID string) (*domain.WorkflowVersion, error) {
+	return uc.repo.GetLatestVersion(ctx, workflowID)
 }
 
 func (uc *workflowUseCase) ExecutePipeline(ctx context.Context, tenantID uuid.UUID, userID uuid.UUID, versionID uuid.UUID) (*engine.ExecutionContext, error) {

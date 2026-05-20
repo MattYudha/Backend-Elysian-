@@ -1,6 +1,9 @@
 package engine
 
-import "errors"
+import (
+	"fmt"
+	"strings"
+)
 
 // TopologicalSort mengurutkan node dari hulu ke hilir menggunakan Algoritma Kahn
 func TopologicalSort(graph *VisualGraph) ([]Node, error) {
@@ -44,7 +47,17 @@ func TopologicalSort(graph *VisualGraph) ([]Node, error) {
 
 	// Jika jumlah node yang terurut tidak sama dengan total node, ADA SIKLUS (Infinite Loop)
 	if len(sorted) != len(graph.Nodes) {
-		return nil, errors.New("FATAL: Siklus terdeteksi dalam grafik workflow. Eksekusi dibatalkan")
+		var cycleNodes []string
+		sortedMap := make(map[string]bool)
+		for _, sn := range sorted {
+			sortedMap[sn.ID] = true
+		}
+		for _, n := range graph.Nodes {
+			if !sortedMap[n.ID] {
+				cycleNodes = append(cycleNodes, n.ID)
+			}
+		}
+		return nil, fmt.Errorf("Workflow contains a circular dependency involving nodes: %s", strings.Join(cycleNodes, ", "))
 	}
 
 	return sorted, nil

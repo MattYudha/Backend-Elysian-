@@ -14,4 +14,6 @@ type UserRepository interface {
 	Delete(ctx context.Context, id string) error
 	List(ctx context.Context, limit, offset int) ([]*domain.User, int64, error)
 	ExistsByEmail(ctx context.Context, email string) (bool, error)
+	GetPreferences(ctx context.Context, userID string) (*domain.UserPreferences, error)
+	UpdatePreferences(ctx context.Context, prefs *domain.UserPreferences) error
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/Elysian-Rebirth/backend-go/internal/domain"
 	"github.com/Elysian-Rebirth/backend-go/internal/domain/repository"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -103,4 +104,38 @@ func (r *UserRepository) ExistsByEmail(ctx context.Context, email string) (bool,
 		return false, fmt.Errorf("failed to check user existence: %w", err)
 	}
 	return count > 0, nil
+}
+
+func (r *UserRepository) GetPreferences(ctx context.Context, userID string) (*domain.UserPreferences, error) {
+	var prefs domain.UserPreferences
+	err := r.db.WithContext(ctx).Where("user_id = ?", userID).First(&prefs).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		uid, err := uuid.Parse(userID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid user ID: %w", err)
+		}
+		// Return default preferences
+		defaultPrefs := &domain.UserPreferences{
+			UserID:               uid,
+			Appearance:           "system",
+			NotificationsJSON:    []byte("{}"),
+			SecuritySettingsJSON: []byte("{}"),
+		}
+		if err := r.db.WithContext(ctx).Create(defaultPrefs).Error; err != nil {
+			return defaultPrefs, nil
+		}
+		return defaultPrefs, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user preferences: %w", err)
+	}
+	return &prefs, nil
+}
+
+func (r *UserRepository) UpdatePreferences(ctx context.Context, prefs *domain.UserPreferences) error {
+	result := r.db.WithContext(ctx).Save(prefs)
+	if result.Error != nil {
+		return fmt.Errorf("failed to update user preferences: %w", result.Error)
+	}
+	return nil
 }
