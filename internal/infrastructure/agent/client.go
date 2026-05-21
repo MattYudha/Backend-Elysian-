@@ -42,7 +42,7 @@ func (f *AgentFactory) Close() error {
 func (f *AgentFactory) CreateAgent(executionID string, systemPrompt string) (*sdkagent.Agent, error) {
 	// 1. Init Adapter with Reused Client
 	// Notice we pass f.client, NOT creating a new one.
-	llmProvider, err := NewGeminiStudioAdapter(f.client, "gemini-1.5-flash")
+	llmProvider, err := NewGeminiStudioAdapter(f.client, "gemini-2.5-flash")
 	if err != nil {
 		return nil, err
 	}

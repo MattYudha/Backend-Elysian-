@@ -20,6 +20,8 @@ type MockDocumentUsecase struct {
 	ConfirmUploadFunc func(ctx context.Context, tenantID, userID uuid.UUID, title, objectKey, category string) (*domain.Document, error)
 	ListDocumentsFunc func(ctx context.Context, tenantID string, limit, offset int) ([]*domain.Document, int64, error)
 	ApproveFunc       func(ctx context.Context, tenantID, docID uuid.UUID) error
+	DeleteFunc        func(ctx context.Context, tenantID, docID uuid.UUID) error
+	UpdateTextFunc    func(ctx context.Context, tenantID, docID uuid.UUID, text string) error
 }
 
 func (m *MockDocumentUsecase) GetUploadURL(ctx context.Context, tenantID, userID uuid.UUID, fileName string) (string, string, error) {
@@ -36,6 +38,20 @@ func (m *MockDocumentUsecase) ListDocuments(ctx context.Context, tenantID string
 
 func (m *MockDocumentUsecase) Approve(ctx context.Context, tenantID, docID uuid.UUID) error {
 	return m.ApproveFunc(ctx, tenantID, docID)
+}
+
+func (m *MockDocumentUsecase) Delete(ctx context.Context, tenantID, docID uuid.UUID) error {
+	if m.DeleteFunc != nil {
+		return m.DeleteFunc(ctx, tenantID, docID)
+	}
+	return nil
+}
+
+func (m *MockDocumentUsecase) UpdateText(ctx context.Context, tenantID, docID uuid.UUID, text string) error {
+	if m.UpdateTextFunc != nil {
+		return m.UpdateTextFunc(ctx, tenantID, docID, text)
+	}
+	return nil
 }
 
 func TestDocumentHandler_Approve(t *testing.T) {

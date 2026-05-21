@@ -3,9 +3,11 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/Elysian-Rebirth/backend-go/internal/domain"
 	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/cache"
+	"github.com/Elysian-Rebirth/backend-go/internal/middleware"
 	"github.com/Elysian-Rebirth/backend-go/internal/usecase/swarm"
 	"github.com/gin-gonic/gin"
 )
@@ -34,7 +36,11 @@ func (h *SwarmHandler) Trigger(c *gin.Context) {
 		return
 	}
 
-	task, err := h.swarmUsecase.TriggerSwarm(c.Request.Context(), req.DocumentID, req.Items)
+	tenantIDStr := middleware.MustGetTenantIDFromContext(c)
+	user := middleware.MustGetUserFromContext(c)
+	userIDStr := user.ID.String()
+
+	task, err := h.swarmUsecase.TriggerSwarm(c.Request.Context(), req.DocumentID, req.Items, tenantIDStr, userIDStr)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -127,6 +133,35 @@ func (h *SwarmHandler) GetByID(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status": "success",
 		"data":   task,
+	})
+}
+
+// List godoc
+// @Summary      List swarm consensus tasks
+// @Description  Returns a paginated list of swarm consensus tasks for the tenant.
+// @Tags         swarm
+// @Produce      json
+// @Param        limit   query  int  false  "Limit"
+// @Param        offset  query  int  false  "Offset"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  ErrorResponse
+// @Security     BearerAuth
+// @Router       /api/v1/swarm/tasks [get]
+func (h *SwarmHandler) List(c *gin.Context) {
+	tenantID := middleware.MustGetTenantIDFromContext(c)
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+
+	tasks, total, err := h.swarmUsecase.ListSwarmTasks(c.Request.Context(), tenantID, limit, offset)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data":   tasks,
+		"total":  total,
 	})
 }
 

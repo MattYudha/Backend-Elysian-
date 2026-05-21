@@ -28,7 +28,7 @@ redis:
 
 jwt:
   secret: "elysian-development-secret-key-2024"
-  access_token_expiry: 15m
+  access_token_expiry: 24h
   refresh_token_expiry: 720h
   issuer: "elysian-api"
 

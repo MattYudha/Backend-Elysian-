@@ -7,6 +7,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/joho/godotenv"
@@ -51,6 +52,8 @@ func Load() (*Config, error) {
 	v.SetDefault("database.max_idle_conns", 10)
 	v.SetDefault("database.conn_max_lifetime", "10m")
 	v.SetDefault("database.conn_max_idle_time", "5m")
+	v.SetDefault("mongodb.uri", "mongodb://localhost:27017")
+	v.SetDefault("mongodb.db", "elysian_staging")
 
 	// read default config
 	if err := v.ReadInConfig(); err != nil {
@@ -209,6 +212,16 @@ func overrideWithEnv(cfg *Config) {
 	if v := os.Getenv("JWT_SECRET"); v != "" {
 		cfg.JWT.Secret = v
 	}
+	if v := os.Getenv("JWT_ACCESS_TOKEN_EXPIRY"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.JWT.AccessTokenExpiry = d
+		}
+	}
+	if v := os.Getenv("JWT_REFRESH_TOKEN_EXPIRY"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.JWT.RefreshTokenExpiry = d
+		}
+	}
 
 	// RabbitMQ
 	if v := os.Getenv("RABBITMQ_URL"); v != "" {
@@ -234,6 +247,14 @@ func overrideWithEnv(cfg *Config) {
 		cfg.ML.ServiceURL = v
 	}
 
+	// MongoDB
+	if v := os.Getenv("MONGO_URI"); v != "" {
+		cfg.MongoDB.URI = v
+	}
+	if v := os.Getenv("MONGO_DB"); v != "" {
+		cfg.MongoDB.DB = v
+	}
+
 	// AI
 	if v := os.Getenv("AI_DEEPSEEK_API_KEY"); v != "" {
 		cfg.AI.DeepSeekAPIKey = v
@@ -254,6 +275,7 @@ func (c *Config) MaskSensitive() *Config {
 	masked.JWT.Secret = "***MASKED***"
 	masked.Storage.AccessKey = "***MASKED***"
 	masked.Storage.SecretKey = "***MASKED***"
+	masked.MongoDB.URI = "***MASKED***"
 	return &masked
 }
 

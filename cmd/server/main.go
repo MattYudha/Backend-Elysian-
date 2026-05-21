@@ -109,7 +109,18 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to connect to Redis: %v", err)
 	}
-	log.Printf("Redis connectin established")
+	log.Printf("Redis connection established")
+
+	mongoStaging, err := database.NewMongoClient(cfg)
+	if err != nil {
+		log.Fatalf("failed to connect to MongoDB: %v", err)
+	}
+	log.Printf("MongoDB Staging client established")
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = mongoStaging.Close(ctx)
+	}()
 
 	userRepo := postgresRepo.NewUserRepository(db)
 	roleRepo := postgresRepo.NewRoleRepository(db, redisCache.(*cache.RedisCache).GetClient())
@@ -203,25 +214,12 @@ func main() {
 	}
 
 	// Always initialize docUsecase and documentHandler to prevent panic dereferences
-	docUsecase := documentUsecase.NewDocumentUsecase(docRepo, s3Service, asynqClient)
+	docUsecase := documentUsecase.NewDocumentUsecase(docRepo, s3Service, asynqClient, mongoStaging)
 	documentHandler = handler.NewDocumentHandler(docUsecase)
 
-	if s3Service != nil {
-		// Start Asynq Worker with Docling parser + Gemini key from config (never hardcoded)
-		asynqWorker := mq.NewAsynqWorker(cfg)
-		docParser := parsing.NewDocumentParser(cfg.AI.DoclingURL, cfg.AI.UnstructuredURL)
-		docTaskHandler := rag.NewDocumentTaskHandler(docRepo, s3Service, docParser, cfg.AI.GeminiAPIKey)
-		asynqWorker.RegisterHandler(rag.TypeParseDocument, docTaskHandler.HandleParseDocument)
-		asynqWorker.RegisterHandler(rag.TypeEmbedDocument, docTaskHandler.HandleEmbedDocument)
-		go func() {
-			if err := asynqWorker.Start(); err != nil {
-				log.Printf("[WARN] Asynq Worker failed to start: %v", err)
-			}
-		}()
-		log.Printf("Asynq RAG Worker started (Gemini embedding enabled: %v)", cfg.AI.GeminiAPIKey != "")
-	}
+	// Asynq worker is initialized and started below to centralize handler registrations for both RAG and Swarm tasks.
 
-	authMiddleware := middleware.AuthMiddleware(jwtSvc, userRepo, roleRepo, redisCache.(*cache.RedisCache).GetClient())
+	authMiddleware := middleware.AuthMiddleware(jwtSvc, userRepo, roleRepo, redisCache.(*cache.RedisCache).GetClient(), db)
 
 	// RAG Search Handler — uses the already-initialized docRepo and Gemini key from config
 	var ragSearchHandler *handler.RAGSearchHandler
@@ -254,7 +252,32 @@ func main() {
 
 	// Swarm Components
 	swarmRepo := postgresRepo.NewSwarmRepository(db)
-	swarmUsecase := swarm.NewSwarmUsecase(swarmRepo, redisCache, bcService)
+
+	// Initialize Asynq Worker and register all handlers (RAG and Swarm)
+	asynqWorker := mq.NewAsynqWorker(cfg)
+
+	// Register RAG handlers if S3 is active
+	if s3Service != nil {
+		docParser := parsing.NewDocumentParser(cfg.AI.DoclingURL, cfg.AI.UnstructuredURL)
+		docTaskHandler := rag.NewDocumentTaskHandler(docRepo, s3Service, docParser, cfg.AI.GeminiAPIKey, mongoStaging)
+		asynqWorker.RegisterHandler(rag.TypeParseDocument, docTaskHandler.HandleParseDocument)
+		asynqWorker.RegisterHandler(rag.TypeEmbedDocument, docTaskHandler.HandleEmbedDocument)
+		log.Printf("Asynq RAG Worker handlers registered (Gemini embedding enabled: %v)", cfg.AI.GeminiAPIKey != "")
+	}
+
+	// Register Swarm task handlers
+	swarmTaskHandler := swarm.NewSwarmTaskHandler(swarmRepo, bcService)
+	asynqWorker.RegisterHandler(swarm.TypeCommitSwarmToBlockchain, swarmTaskHandler.HandleCommitSwarmToBlockchain)
+	log.Printf("Asynq Swarm Worker handlers registered")
+
+	// Start the background Asynq worker process
+	go func() {
+		if err := asynqWorker.Start(); err != nil {
+			log.Printf("[WARN] Asynq Worker failed to start: %v", err)
+		}
+	}()
+
+	swarmUsecase := swarm.NewSwarmUsecase(swarmRepo, redisCache, bcService, asynqClient)
 	swarmHandler := handler.NewSwarmHandler(swarmUsecase, redisCache)
 	blockchainHandler := handler.NewBlockchainHandler(swarmRepo, bcService)
 

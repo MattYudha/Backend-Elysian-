@@ -134,6 +134,8 @@ func SetupRoutes(
 				docs.GET("", documentHandler.List)
 				docs.POST("/search", ragSearchHandler.Search)
 				docs.POST("/:id/approve", documentHandler.Approve)
+				docs.DELETE("/:id", documentHandler.Delete)
+				docs.PATCH("/:id/text", documentHandler.UpdateText)
 			}
 
 			// Swarm (Strict Multi-Tenancy Enforced for Trigger)
@@ -146,6 +148,7 @@ func SetupRoutes(
 				protectedSwarm.Use(authMiddleware, middleware.TenantMiddleware())
 				{
 					protectedSwarm.POST("/upload", swarmHandler.Trigger)
+					protectedSwarm.GET("/tasks", swarmHandler.List)
 					protectedSwarm.GET("/tasks/:id", swarmHandler.GetByID)
 				}
 			}

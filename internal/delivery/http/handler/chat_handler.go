@@ -189,7 +189,7 @@ func (h *ChatHandler) SendMessage(c *gin.Context) {
 			modelResponse = "Error connecting to AI engine: " + err.Error()
 		} else {
 			defer geminiClient.Close()
-			model := geminiClient.GenerativeModel("gemini-1.5-flash")
+			model := geminiClient.GenerativeModel("gemini-2.5-flash")
 			
 			// Get previous message history for conversational memory
 			history, _ := h.chatRepo.ListMessages(c.Request.Context(), sessionID)

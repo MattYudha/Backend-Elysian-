@@ -6,7 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Elysian-Rebirth/backend-go/internal/config"
 	"github.com/Elysian-Rebirth/backend-go/internal/domain"
+	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/database"
 	documentUseCase "github.com/Elysian-Rebirth/backend-go/internal/usecase/document"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq"
@@ -19,12 +21,20 @@ type MockDocumentRepository struct {
 	StoreChunksFunc  func(ctx context.Context, chunks []domain.DocumentChunk) error
 	FindByTenantFunc func(ctx context.Context, tenantID string, limit, offset int) ([]*domain.Document, int64, error)
 	FindByIDFunc     func(ctx context.Context, id string) (*domain.Document, error)
+	DeleteFunc       func(ctx context.Context, tenantID, docID uuid.UUID) error
 	HybridSearchFunc func(ctx context.Context, params domain.HybridSearchParams) ([]domain.HybridSearchResult, error)
 }
 
 func (m *MockDocumentRepository) Create(ctx context.Context, doc *domain.Document) error {
 	if m.CreateFunc != nil {
 		return m.CreateFunc(ctx, doc)
+	}
+	return nil
+}
+
+func (m *MockDocumentRepository) Delete(ctx context.Context, tenantID, docID uuid.UUID) error {
+	if m.DeleteFunc != nil {
+		return m.DeleteFunc(ctx, tenantID, docID)
 	}
 	return nil
 }
@@ -88,6 +98,11 @@ func TestDocumentUseCase_Approve(t *testing.T) {
 	tenantID := uuid.New()
 	docID := uuid.New()
 
+	mongoClient, err := database.NewMongoClient(&config.Config{})
+	if err != nil {
+		t.Fatalf("failed to initialize resilient mock mongo client: %v", err)
+	}
+
 	t.Run("Success Approval", func(t *testing.T) {
 		repo := &MockDocumentRepository{
 			FindByIDFunc: func(ctx context.Context, id string) (*domain.Document, error) {
@@ -109,6 +124,13 @@ func TestDocumentUseCase_Approve(t *testing.T) {
 			},
 		}
 
+		// Pre-populate document in mock MongoDB to verify approval flow
+		_ = mongoClient.SaveDocument(context.Background(), &database.StagingDocument{
+			ID:       docID.String(),
+			TenantID: tenantID.String(),
+			Status:   database.StatusPendingQA,
+		})
+
 		taskEnqueued := false
 		mqClient := &MockTaskQueue{
 			EnqueueTaskFunc: func(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error) {
@@ -119,7 +141,7 @@ func TestDocumentUseCase_Approve(t *testing.T) {
 			},
 		}
 
-		uc := documentUseCase.NewDocumentUsecase(repo, nil, mqClient)
+		uc := documentUseCase.NewDocumentUsecase(repo, nil, mqClient, mongoClient)
 		err := uc.Approve(context.Background(), tenantID, docID)
 		if err != nil {
 			t.Fatalf("expected no error, got %v", err)
@@ -127,6 +149,14 @@ func TestDocumentUseCase_Approve(t *testing.T) {
 
 		if !taskEnqueued {
 			t.Error("expected embedding task to be enqueued")
+		}
+
+		// Verify document is APPROVED in mock MongoDB
+		doc, err := mongoClient.GetDocument(context.Background(), docID.String())
+		if err != nil {
+			t.Errorf("failed to retrieve document from mock MongoDB: %v", err)
+		} else if doc.Status != database.StatusApproved {
+			t.Errorf("expected mock MongoDB status to be APPROVED, got %v", doc.Status)
 		}
 	})
 
@@ -136,7 +166,7 @@ func TestDocumentUseCase_Approve(t *testing.T) {
 				return nil, errors.New("db record not found")
 			},
 		}
-		uc := documentUseCase.NewDocumentUsecase(repo, nil, nil)
+		uc := documentUseCase.NewDocumentUsecase(repo, nil, nil, mongoClient)
 		err := uc.Approve(context.Background(), tenantID, docID)
 		if err == nil || !strings.Contains(err.Error(), "document not found") {
 			t.Fatalf("expected document not found error, got %v", err)
@@ -154,7 +184,7 @@ func TestDocumentUseCase_Approve(t *testing.T) {
 				}, nil
 			},
 		}
-		uc := documentUseCase.NewDocumentUsecase(repo, nil, nil)
+		uc := documentUseCase.NewDocumentUsecase(repo, nil, nil, mongoClient)
 		err := uc.Approve(context.Background(), tenantID, docID)
 		if err == nil || !strings.Contains(err.Error(), "unauthorized") {
 			t.Fatalf("expected unauthorized error, got %v", err)
@@ -171,7 +201,7 @@ func TestDocumentUseCase_Approve(t *testing.T) {
 				}, nil
 			},
 		}
-		uc := documentUseCase.NewDocumentUsecase(repo, nil, nil)
+		uc := documentUseCase.NewDocumentUsecase(repo, nil, nil, mongoClient)
 		err := uc.Approve(context.Background(), tenantID, docID)
 		if err == nil || !strings.Contains(err.Error(), "cannot approve document") {
 			t.Fatalf("expected cannot approve error, got %v", err)

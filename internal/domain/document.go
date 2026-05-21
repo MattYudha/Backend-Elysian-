@@ -39,6 +39,7 @@ type DocumentRepository interface {
 	StoreChunks(ctx context.Context, chunks []DocumentChunk) error
 	FindByTenant(ctx context.Context, tenantID string, limit, offset int) ([]*Document, int64, error)
 	FindByID(ctx context.Context, id string) (*Document, error)
+	Delete(ctx context.Context, tenantID, docID uuid.UUID) error
 	// HybridSearch performs tenant-scoped semantic (pgvector HNSW) + lexical (FTS) search
 	// and fuses results using Reciprocal Rank Fusion (RRF).
 	HybridSearch(ctx context.Context, params HybridSearchParams) ([]HybridSearchResult, error)
@@ -72,4 +73,6 @@ type DocumentUsecase interface {
 	ConfirmUpload(ctx context.Context, tenantID, userID uuid.UUID, title, objectKey string, category string) (*Document, error)
 	ListDocuments(ctx context.Context, tenantID string, limit, offset int) ([]*Document, int64, error)
 	Approve(ctx context.Context, tenantID, docID uuid.UUID) error
+	Delete(ctx context.Context, tenantID, docID uuid.UUID) error
+	UpdateText(ctx context.Context, tenantID, docID uuid.UUID, text string) error
 }

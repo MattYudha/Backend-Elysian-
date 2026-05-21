@@ -132,21 +132,29 @@ func (h *TenantHandler) CreateTenant(c *gin.Context) {
 			return err
 		}
 
-		// 2. Find or create user role for this tenant (admin role)
+		// 2. Find or create user roles for this tenant (admin, member, owner)
+		defaultRoles := []string{"admin", "member", "owner"}
 		var adminRole domain.Role
-		err := tx.Where("tenant_id = ? AND name = ?", tenant.ID, "admin").First(&adminRole).Error
-		if err != nil {
-			if err == gorm.ErrRecordNotFound {
-				adminRole = domain.Role{
-					ID:       uuid.New(),
-					TenantID: &tenant.ID,
-					Name:     "admin",
-				}
-				if err := tx.Create(&adminRole).Error; err != nil {
+
+		for _, roleName := range defaultRoles {
+			var role domain.Role
+			err := tx.Where("tenant_id = ? AND name = ?", tenant.ID, roleName).First(&role).Error
+			if err != nil {
+				if err == gorm.ErrRecordNotFound {
+					role = domain.Role{
+						ID:       uuid.New(),
+						TenantID: &tenant.ID,
+						Name:     roleName,
+					}
+					if err := tx.Create(&role).Error; err != nil {
+						return err
+					}
+				} else {
 					return err
 				}
-			} else {
-				return err
+			}
+			if roleName == "admin" {
+				adminRole = role
 			}
 		}
 

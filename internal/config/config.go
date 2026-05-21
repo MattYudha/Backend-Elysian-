@@ -5,6 +5,7 @@ import "time"
 type Config struct {
 	Server   ServerConfig   `mapstructure:"server"`
 	Database DatabaseConfig `mapstructure:"database"`
+	MongoDB  MongoDBConfig  `mapstructure:"mongodb"`
 	Redis    RedisConfig    `mapstructure:"redis"`
 	JWT      JWTConfig      `mapstructure:"jwt"`
 	RabbitMQ RabbitMQConfig `mapstructure:"rabbitmq"`
@@ -15,6 +16,11 @@ type Config struct {
 	Upload   UploadConfig   `mapstructure:"upload"`
 	AI         AIConfig         `mapstructure:"ai"`
 	Blockchain BlockchainConfig `mapstructure:"blockchain"`
+}
+
+type MongoDBConfig struct {
+	URI string `mapstructure:"uri"`
+	DB  string `mapstructure:"db"`
 }
 
 type AIConfig struct {

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Elysian-Rebirth/backend-go/internal/domain"
+	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/database"
 	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/mq"
 	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/storage"
 	"github.com/Elysian-Rebirth/backend-go/internal/usecase/rag"
@@ -13,13 +14,14 @@ import (
 )
 
 type documentUsecase struct {
-	repo     domain.DocumentRepository
-	s3       *storage.S3Service
-	mqClient mq.TaskQueue
+	repo        domain.DocumentRepository
+	s3          *storage.S3Service
+	mqClient    mq.TaskQueue
+	mongoClient *database.MongoClient
 }
 
-func NewDocumentUsecase(repo domain.DocumentRepository, s3 *storage.S3Service, mqClient mq.TaskQueue) domain.DocumentUsecase {
-	return &documentUsecase{repo: repo, s3: s3, mqClient: mqClient}
+func NewDocumentUsecase(repo domain.DocumentRepository, s3 *storage.S3Service, mqClient mq.TaskQueue, mongoClient *database.MongoClient) domain.DocumentUsecase {
+	return &documentUsecase{repo: repo, s3: s3, mqClient: mqClient, mongoClient: mongoClient}
 }
 
 // GetUploadURL (Step 1: GET /presign)
@@ -55,7 +57,20 @@ func (u *documentUsecase) ConfirmUpload(ctx context.Context, tenantID, userID uu
 		return nil, fmt.Errorf("failed to create document record: %w", err)
 	}
 
-	// 2. Enqueue parsing task (non-blocking)
+	// 2. Save raw staging record in MongoDB Staging with PENDING_QA status
+	stagingDoc := &database.StagingDocument{
+		ID:       doc.ID.String(),
+		TenantID: tenantID.String(),
+		FileName: title,
+		RawText:  "",
+		Status:   database.StatusPendingQA,
+	}
+	if err := u.mongoClient.SaveDocument(ctx, stagingDoc); err != nil {
+		// Log the warning but don't fail the upload confirmation
+		fmt.Printf("[WARN] Failed to write initial skeleton document to MongoDB staging: %v\n", err)
+	}
+
+	// 3. Enqueue parsing task (non-blocking)
 	task, err := rag.NewParseDocumentTask(doc.ID.String(), tenantID.String(), objectKey, category)
 	if err != nil {
 		// Mark as failed but return the document ID so frontend can retry
@@ -95,12 +110,18 @@ func (u *documentUsecase) Approve(ctx context.Context, tenantID, docID uuid.UUID
 		return fmt.Errorf("cannot approve document: current status is %s, expected pending_qa", doc.Status)
 	}
 
-	// 4. Update status to processing
+	// 4. Update MongoDB document status to APPROVED
+	if err := u.mongoClient.ApproveDocument(ctx, docID.String(), "human_qa_operator"); err != nil {
+		// Log but don't block PostgreSQL update in case MongoDB is running in loose sync
+		fmt.Printf("[WARN] Failed to mark staging document APPROVED in MongoDB: %v\n", err)
+	}
+
+	// 5. Update status to processing
 	if err := u.repo.UpdateStatus(ctx, docID, "processing", nil); err != nil {
 		return fmt.Errorf("failed to update status: %w", err)
 	}
 
-	// 5. Dispatch embedding task
+	// 6. Dispatch embedding task
 	task, err := rag.NewEmbedDocumentTask(docID.String(), tenantID.String(), doc.Category)
 	if err != nil {
 		_ = u.repo.UpdateStatus(ctx, docID, "pending_qa", nil) // rollback status
@@ -110,6 +131,34 @@ func (u *documentUsecase) Approve(ctx context.Context, tenantID, docID uuid.UUID
 	if _, err := u.mqClient.EnqueueTask(task); err != nil {
 		_ = u.repo.UpdateStatus(ctx, docID, "pending_qa", nil) // rollback status
 		return fmt.Errorf("failed to enqueue embedding task: %w", err)
+	}
+
+	return nil
+}
+
+func (u *documentUsecase) Delete(ctx context.Context, tenantID, docID uuid.UUID) error {
+	doc, err := u.repo.FindByID(ctx, docID.String())
+	if err != nil {
+		return err
+	}
+	if doc.TenantID != tenantID {
+		return fmt.Errorf("unauthorized: document does not belong to your tenant")
+	}
+	return u.repo.Delete(ctx, tenantID, docID)
+}
+
+func (u *documentUsecase) UpdateText(ctx context.Context, tenantID, docID uuid.UUID, text string) error {
+	doc, err := u.repo.FindByID(ctx, docID.String())
+	if err != nil {
+		return err
+	}
+	if doc.TenantID != tenantID {
+		return fmt.Errorf("unauthorized: document does not belong to your tenant")
+	}
+
+	// Update raw plain text in MongoDB Staging Area
+	if err := u.mongoClient.UpdateText(ctx, docID.String(), text); err != nil {
+		return fmt.Errorf("failed to update text in MongoDB staging: %w", err)
 	}
 
 	return nil

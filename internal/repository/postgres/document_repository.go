@@ -248,3 +248,9 @@ func pgFTSQuery(text string) string {
 	}
 	return strings.Join(valid, " & ")
 }
+
+func (r *documentRepository) Delete(ctx context.Context, tenantID, docID uuid.UUID) error {
+	return r.db.WithContext(ctx).
+		Where("id = ? AND tenant_id = ?", docID, tenantID).
+		Delete(&domain.Document{}).Error
+}

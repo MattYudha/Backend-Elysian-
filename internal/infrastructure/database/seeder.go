@@ -125,6 +125,34 @@ func SeedAdmin(db *gorm.DB) error {
 			}
 		}
 
+		// 4. Ensure that for EVERY tenant in the database, the 'admin', 'member', and 'owner' roles exist.
+		var tenants []domain.Tenant
+		if err := tx.Find(&tenants).Error; err != nil {
+			return err
+		}
+		for _, t := range tenants {
+			defaultRoles := []string{"admin", "member", "owner"}
+			for _, roleName := range defaultRoles {
+				var role domain.Role
+				err := tx.Where("tenant_id = ? AND name = ?", t.ID, roleName).First(&role).Error
+				if err != nil {
+					if err == gorm.ErrRecordNotFound {
+						log.Printf("Seeding missing role '%s' for tenant '%s'...", roleName, t.Name)
+						role = domain.Role{
+							ID:       uuid.New(),
+							TenantID: &t.ID,
+							Name:     roleName,
+						}
+						if err := tx.Create(&role).Error; err != nil {
+							return err
+						}
+					} else {
+						return err
+					}
+				}
+			}
+		}
+
 		return nil
 	})
 }

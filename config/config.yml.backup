@@ -28,7 +28,7 @@ redis:
 
 jwt:
   secret: "dev_secret_key_change_in_production_min_32_characters"
-  access_token_expiry: 15m
+  access_token_expiry: 24h
   refresh_token_expiry: 168h  # 7 days
   issuer: "elysian"
 

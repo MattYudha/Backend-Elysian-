@@ -46,9 +46,9 @@ type geminiCandidate struct {
 }
 
 func (p *GeminiProvider) Generate(ctx context.Context, prompt string, model string) (string, error) {
-	// Default to gemini-1.5-flash if model is empty or generic
-	if model == "deepseek-chat" || model == "" {
-		model = "gemini-1.5-flash"
+	// Default to gemini-2.5-flash if model is empty, generic, or legacy
+	if model == "deepseek-chat" || model == "" || model == "gemini-1.5-flash" {
+		model = "gemini-2.5-flash"
 	}
 
 	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", model, p.apiKey)

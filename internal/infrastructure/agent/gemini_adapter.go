@@ -26,8 +26,8 @@ func NewGeminiStudioAdapter(client *genai.Client, modelName string) (*GeminiStud
 		return nil, errors.New("client cannot be nil")
 	}
 
-	if modelName == "" {
-		modelName = "gemini-1.5-flash"
+	if modelName == "" || modelName == "gemini-1.5-flash" {
+		modelName = "gemini-2.5-flash"
 	}
 
 	model := client.GenerativeModel(modelName)

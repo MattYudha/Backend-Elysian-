@@ -169,3 +169,87 @@ func (h *DocumentHandler) Approve(c *gin.Context) {
 		"message":     "Document approved. Vectorization task enqueued.",
 	})
 }
+
+// Delete godoc
+// @Summary      Delete document
+// @Description  Deletes a document record from the database.
+// @Tags         knowledge
+// @Produce      json
+// @Param        id   path  string  true  "Document ID"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  ErrorResponse
+// @Security     BearerAuth
+// @Router       /api/v1/documents/{id} [delete]
+func (h *DocumentHandler) Delete(c *gin.Context) {
+	docIDStr := c.Param("id")
+	docID, err := uuid.Parse(docIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid document ID path parameter"})
+		return
+	}
+
+	tenantIDStr := middleware.MustGetTenantIDFromContext(c)
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid X-Tenant-ID header"})
+		return
+	}
+
+	err = h.usecase.Delete(c.Request.Context(), tenantID, docID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": "Document deleted successfully",
+	})
+}
+
+// UpdateText godoc
+// @Summary      Update document extracted text
+// @Description  Updates the extracted plain text inside document's ai_analysis_json.
+// @Tags         knowledge
+// @Accept       json
+// @Produce      json
+// @Param        id   path  string  true  "Document ID"
+// @Param        request body map[string]string true "Update text request"
+// @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  ErrorResponse
+// @Security     BearerAuth
+// @Router       /api/v1/documents/{id}/text [patch]
+func (h *DocumentHandler) UpdateText(c *gin.Context) {
+	docIDStr := c.Param("id")
+	docID, err := uuid.Parse(docIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid document ID path parameter"})
+		return
+	}
+
+	tenantIDStr := middleware.MustGetTenantIDFromContext(c)
+	tenantID, err := uuid.Parse(tenantIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "Invalid X-Tenant-ID header"})
+		return
+	}
+
+	var req struct {
+		ExtractedText string `json:"extracted_text" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	err = h.usecase.UpdateText(c.Request.Context(), tenantID, docID, req.ExtractedText)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, ErrorResponse{Error: err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "success",
+		"message": "Document text updated successfully",
+	})
+}

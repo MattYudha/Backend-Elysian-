@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/Elysian-Rebirth/backend-go/internal/domain"
+	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/database"
 	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/parsing"
 	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/storage"
 	"github.com/google/generative-ai-go/genai"
@@ -82,6 +83,7 @@ type DocumentTaskHandler struct {
 	s3           *storage.S3Service
 	parser       *parsing.DocumentParser
 	geminiAPIKey string
+	mongoClient  *database.MongoClient
 }
 
 func NewDocumentTaskHandler(
@@ -89,12 +91,14 @@ func NewDocumentTaskHandler(
 	s3 *storage.S3Service,
 	parser *parsing.DocumentParser,
 	geminiAPIKey string,
+	mongoClient *database.MongoClient,
 ) *DocumentTaskHandler {
 	return &DocumentTaskHandler{
 		docRepo:      docRepo,
 		s3:           s3,
 		parser:       parser,
 		geminiAPIKey: geminiAPIKey,
+		mongoClient:  mongoClient,
 	}
 }
 
@@ -128,16 +132,35 @@ func (h *DocumentTaskHandler) HandleParseDocument(ctx context.Context, t *asynq.
 		return fmt.Errorf("text extraction failed: %w", err)
 	}
 
-	// 4. Update status to pending_qa, storing the raw parsed text inside metadata
+	// Fetch document info to get details (e.g. title) for MongoDB metadata
+	doc, err := h.docRepo.FindByID(ctx, payload.DocumentID)
+	if err != nil {
+		h.failDoc(ctx, docID, "failed to find document: "+err.Error())
+		return fmt.Errorf("failed to find document: %w", err)
+	}
+
+	// 4. Save raw parsed text to MongoDB Staging Area
+	stagingDoc := &database.StagingDocument{
+		ID:        payload.DocumentID,
+		TenantID:  payload.TenantID,
+		FileName:  doc.Title,
+		RawText:   rawText,
+		Status:    database.StatusPendingQA,
+	}
+	if err := h.mongoClient.SaveDocument(ctx, stagingDoc); err != nil {
+		h.failDoc(ctx, docID, "failed to save parsed text to MongoDB: "+err.Error())
+		return fmt.Errorf("failed to save parsed text to MongoDB: %w", err)
+	}
+
+	// 5. Update status to pending_qa in PostgreSQL with non-heavy metadata
 	metadata := map[string]interface{}{
-		"extracted_text": rawText,
-		"parser":         "docling",
+		"parser": "docling",
 	}
 	if err := h.docRepo.UpdateStatus(ctx, docID, "pending_qa", metadata); err != nil {
 		return fmt.Errorf("failed to mark document pending_qa: %w", err)
 	}
 
-	log.Printf("[RAG-Worker] ✅ Document %s parsed, status set to pending_qa", payload.DocumentID)
+	log.Printf("[RAG-Worker] ✅ Document %s parsed and staged in MongoDB, status set to pending_qa", payload.DocumentID)
 	return nil
 }
 
@@ -156,30 +179,27 @@ func (h *DocumentTaskHandler) HandleEmbedDocument(ctx context.Context, t *asynq.
 	// 1. Mark as processing/embedding
 	_ = h.docRepo.UpdateStatus(ctx, docID, "processing", nil)
 
-	// 2. Retrieve document from DB to get the extracted text
+	// 2. Retrieve document from DB
 	doc, err := h.docRepo.FindByID(ctx, payload.DocumentID)
 	if err != nil {
 		h.failDoc(ctx, docID, "failed to find document record: "+err.Error())
 		return fmt.Errorf("failed to find document: %w", err)
 	}
 
-	// 3. Parse ai_analysis_json to extract the text
+	// 3. Retrieve raw text from MongoDB Staging Area
+	stagingDoc, err := h.mongoClient.GetDocument(ctx, payload.DocumentID)
+	if err != nil {
+		h.failDoc(ctx, docID, "failed to retrieve staging document from MongoDB: "+err.Error())
+		return fmt.Errorf("failed to retrieve staging document: %w", err)
+	}
+	extractedText := stagingDoc.RawText
+
 	var metadata map[string]interface{}
-	if err := json.Unmarshal([]byte(doc.AiAnalysisJSON), &metadata); err != nil {
-		h.failDoc(ctx, docID, "failed to parse document metadata: "+err.Error())
-		return fmt.Errorf("failed to parse metadata: %w", err)
+	if len(doc.AiAnalysisJSON) > 0 {
+		_ = json.Unmarshal([]byte(doc.AiAnalysisJSON), &metadata)
 	}
-
-	extractedTextVal, ok := metadata["extracted_text"]
-	if !ok {
-		h.failDoc(ctx, docID, "extracted_text not found in document metadata")
-		return fmt.Errorf("extracted_text missing: %w", asynq.SkipRetry)
-	}
-
-	extractedText, ok := extractedTextVal.(string)
-	if !ok || extractedText == "" {
-		h.failDoc(ctx, docID, "extracted_text is empty or not a string")
-		return fmt.Errorf("extracted_text is empty: %w", asynq.SkipRetry)
+	if metadata == nil {
+		metadata = make(map[string]interface{})
 	}
 
 	// 4. Markdown-Header-Aware Chunking
