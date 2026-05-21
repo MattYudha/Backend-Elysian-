@@ -135,7 +135,19 @@ func (u *SwarmUsecase) HandleCallback(ctx context.Context, callback domain.Swarm
 
 	// Publish to Redis PubSub for SSE streaming
 	if redisCache, ok := u.redis.(*cache.RedisCache); ok {
-		redisCache.GetClient().Publish(ctx, "swarm:events", resultsBytes)
+		ssePayload := map[string]interface{}{
+			"task_id":    task.ID,
+			"status":     task.Status,
+			"results":    callback.Results,
+			"blockchain": map[string]interface{}{
+				"tx_hash": task.BlockchainTx,
+				"network": task.BlockchainNet,
+				"status":  task.BlockchainStat,
+			},
+			"timestamp": time.Now().UnixNano() / int64(time.Millisecond),
+		}
+		sseBytes, _ := json.Marshal(ssePayload)
+		redisCache.GetClient().Publish(ctx, "swarm:events", sseBytes)
 	}
 
 	// Step 5 — Push hash to blockchain asynchronously via Asynq queue
