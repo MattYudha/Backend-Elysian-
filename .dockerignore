@@ -1,0 +1,13 @@
+.git
+.github
+.env
+.env.*
+*.local
+node_modules
+tmp
+dist
+build
+Dockerfile
+docker-compose*.yml
+config/*.backup
+config/*.local.yml

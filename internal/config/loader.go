@@ -1,0 +1,314 @@
+package config
+
+import (
+	"fmt"
+	"log"
+	"net/url"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/go-playground/validator/v10"
+	"github.com/joho/godotenv"
+	"github.com/spf13/viper"
+)
+
+var validate = validator.New()
+
+// load reads configuration from multiple sources and returns a validated Config
+func Load() (*Config, error) {
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found, using environment variables and config files")
+	}
+
+	// Determine environment: check multiple sources since 'ENV' keyword
+	// conflicts with Docker/Railway internals.
+	// Priority: APP_ENV > ENV > RAILWAY_ENVIRONMENT_NAME > RAILWAY_ENVIRONMENT > "development"
+	env := os.Getenv("APP_ENV")
+	if env == "" {
+		env = os.Getenv("ENV")
+	}
+	if env == "" {
+		env = os.Getenv("RAILWAY_ENVIRONMENT_NAME") // Automatically set by Railway
+	}
+	if env == "" {
+		env = os.Getenv("RAILWAY_ENVIRONMENT") // Alternative Railway var
+	}
+	if env == "" {
+		env = "development"
+	}
+	log.Printf("Detected environment: %s", env)
+
+	// setup Viper
+	v := viper.New()
+	v.SetConfigName("config")
+	v.SetConfigType("yaml")
+	v.AddConfigPath("./config")
+	v.AddConfigPath(".")
+
+	// set explicit safety defaults to prevent OOM in scaling environments
+	v.SetDefault("database.max_open_conns", 50)
+	v.SetDefault("database.max_idle_conns", 10)
+	v.SetDefault("database.conn_max_lifetime", "10m")
+	v.SetDefault("database.conn_max_idle_time", "5m")
+	v.SetDefault("mongodb.uri", "mongodb://localhost:27017")
+	v.SetDefault("mongodb.db", "elysian_staging")
+
+	// read default config
+	if err := v.ReadInConfig(); err != nil {
+		return nil, fmt.Errorf("failed to read default config: %w", err)
+	}
+
+	// Map environment name to config file suffix
+	// e.g. "production" -> config.prod.yml, "development" -> config.dev.yml
+	configSuffix := env
+	switch env {
+	case "production":
+		configSuffix = "prod"
+	case "development":
+		configSuffix = "dev"
+	}
+
+	// merge environment-specific config
+	v.SetConfigName(fmt.Sprintf("config.%s", configSuffix))
+	if err := v.MergeInConfig(); err != nil {
+		log.Printf("No environment-specific config found for '%s' (file: config.%s.yml), using defaults", env, configSuffix)
+	}
+
+	// enable environment variable override
+	v.AutomaticEnv()
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+
+	// unmarshal config into struct
+	var cfg Config
+	if err := v.Unmarshal(&cfg); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal config: %w", err)
+	}
+
+	// overide with environment variables
+	overrideWithEnv(&cfg)
+
+	// validate configuration
+	if err := validate.Struct(&cfg); err != nil {
+		return nil, fmt.Errorf("configuration validation failed: %w", err)
+	}
+
+	// additional custom validation
+	if err := validateCustomRules(&cfg); err != nil {
+		return nil, fmt.Errorf("custom validation failed: %w", err)
+	}
+
+	return &cfg, nil
+}
+
+// overrideWithEnv overrides config values with environment variables
+func overrideWithEnv(cfg *Config) {
+	// Server
+	if v := os.Getenv("PORT"); v != "" {
+		cfg.Server.Port = v
+	}
+	if v := os.Getenv("HOST"); v != "" {
+		cfg.Server.Host = v
+	}
+	// APP_ENV takes priority over ENV (ENV conflicts with Docker keyword)
+	if v := os.Getenv("APP_ENV"); v != "" {
+		cfg.Server.Environment = v
+	} else if v := os.Getenv("ENV"); v != "" {
+		cfg.Server.Environment = v
+	} else if v := os.Getenv("RAILWAY_ENVIRONMENT_NAME"); v != "" {
+		cfg.Server.Environment = v
+	} else if v := os.Getenv("RAILWAY_ENVIRONMENT"); v != "" {
+		cfg.Server.Environment = v
+	}
+
+	// CORS — override via env vars so Railway Variables take precedence over cached config files
+	// CORS_ALLOWED_ORIGINS is comma-separated, e.g. "https://elysian.vercel.app,https://app.elysian.id"
+	if v := os.Getenv("CORS_ALLOWED_ORIGINS"); v != "" {
+		cfg.Security.CORSAllowedOrigins = strings.Split(v, ",")
+	}
+	if v := os.Getenv("CORS_ALLOWED_METHODS"); v != "" {
+		cfg.Security.CORSAllowedMethods = strings.Split(v, ",")
+	}
+	if v := os.Getenv("CORS_ALLOWED_HEADERS"); v != "" {
+		cfg.Security.CORSAllowedHeaders = strings.Split(v, ",")
+	}
+	if v := os.Getenv("CORS_ALLOW_CREDENTIALS"); v != "" {
+		cfg.Security.CORSAllowCredentials = v == "true"
+	}
+
+	// DATABASE_URL takes priority — Railway Postgres provides this automatically
+	if v := os.Getenv("DATABASE_URL"); v != "" {
+		cfg.Database.PgBouncerURL = v
+	} else if v := os.Getenv("PG_BOUNCER_URL"); v != "" {
+		cfg.Database.PgBouncerURL = v
+	}
+
+	// Individual DB fields (used when DATABASE_URL is not set)
+	if v := os.Getenv("DB_HOST"); v != "" {
+		cfg.Database.Host = v
+	}
+	if v := os.Getenv("DB_PORT"); v != "" {
+		cfg.Database.Port = v
+	}
+	if v := os.Getenv("DB_USER"); v != "" {
+		cfg.Database.User = v
+	}
+	if v := os.Getenv("DB_PASSWORD"); v != "" {
+		cfg.Database.Password = v
+	}
+	if v := os.Getenv("DB_NAME"); v != "" {
+		cfg.Database.Name = v
+	}
+	if v := os.Getenv("DB_SSL_MODE"); v != "" {
+		cfg.Database.SSLMode = v
+	}
+
+	// REDIS_URL takes priority — Railway Redis provides this automatically
+	// Format: redis://:password@host:port or redis://default:password@host:port
+	if redisURL := os.Getenv("REDIS_URL"); redisURL != "" {
+		if u, err := url.Parse(redisURL); err == nil {
+			if u.Scheme == "rediss" {
+				cfg.Redis.UseTLS = true
+			}
+			cfg.Redis.Host = u.Hostname()
+			if port := u.Port(); port != "" {
+				cfg.Redis.Port = port
+			}
+			if pass, ok := u.User.Password(); ok {
+				cfg.Redis.Password = pass
+			}
+			// Parse DB from path if present (e.g. /1)
+			if len(u.Path) > 1 {
+				if db, err := strconv.Atoi(u.Path[1:]); err == nil {
+					cfg.Redis.DB = db
+				}
+			}
+		}
+	} else {
+		// Individual Redis fields
+		if v := os.Getenv("REDIS_HOST"); v != "" {
+			cfg.Redis.Host = v
+		}
+		if v := os.Getenv("REDIS_PORT"); v != "" {
+			cfg.Redis.Port = v
+		}
+		if v := os.Getenv("REDIS_PASSWORD"); v != "" {
+			cfg.Redis.Password = v
+		}
+	}
+
+	// Always allow REDIS_DB env var to override
+	if v := os.Getenv("REDIS_DB"); v != "" {
+		if db, err := strconv.Atoi(v); err == nil {
+			cfg.Redis.DB = db
+		}
+	}
+	if v := os.Getenv("REDIS_TLS"); v == "true" {
+		cfg.Redis.UseTLS = true
+	}
+
+	// JWT
+	if v := os.Getenv("JWT_SECRET"); v != "" {
+		cfg.JWT.Secret = v
+	}
+	if v := os.Getenv("JWT_ACCESS_TOKEN_EXPIRY"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.JWT.AccessTokenExpiry = d
+		}
+	}
+	if v := os.Getenv("JWT_REFRESH_TOKEN_EXPIRY"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			cfg.JWT.RefreshTokenExpiry = d
+		}
+	}
+
+	// RabbitMQ
+	if v := os.Getenv("RABBITMQ_URL"); v != "" {
+		cfg.RabbitMQ.URL = v
+	}
+
+	// Storage
+	if v := os.Getenv("S3_ENDPOINT"); v != "" {
+		cfg.Storage.Endpoint = v
+	}
+	if v := os.Getenv("S3_ACCESS_KEY"); v != "" {
+		cfg.Storage.AccessKey = v
+	}
+	if v := os.Getenv("S3_SECRET_KEY"); v != "" {
+		cfg.Storage.SecretKey = v
+	}
+	if v := os.Getenv("S3_BUCKET"); v != "" {
+		cfg.Storage.Bucket = v
+	}
+
+	// ML Service
+	if v := os.Getenv("ML_SERVICE_URL"); v != "" {
+		cfg.ML.ServiceURL = v
+	}
+
+	// MongoDB
+	if v := os.Getenv("MONGO_URI"); v != "" {
+		cfg.MongoDB.URI = v
+	}
+	if v := os.Getenv("MONGO_DB"); v != "" {
+		cfg.MongoDB.DB = v
+	}
+
+	// AI
+	if v := os.Getenv("AI_DEEPSEEK_API_KEY"); v != "" {
+		cfg.AI.DeepSeekAPIKey = v
+	}
+	if v := os.Getenv("AI_OPENAI_API_KEY"); v != "" {
+		cfg.AI.OpenAIAPIKey = v
+	}
+	if v := os.Getenv("AI_GEMINI_API_KEY"); v != "" {
+		cfg.AI.GeminiAPIKey = v
+	}
+}
+
+// MaskSensitive returns a copy of the config with sensitive values masked
+func (c *Config) MaskSensitive() *Config {
+	masked := *c
+	masked.Database.Password = "***MASKED***"
+	masked.Redis.Password = "***MASKED***"
+	masked.JWT.Secret = "***MASKED***"
+	masked.Storage.AccessKey = "***MASKED***"
+	masked.Storage.SecretKey = "***MASKED***"
+	masked.MongoDB.URI = "***MASKED***"
+	return &masked
+}
+
+// GetDatabaseDSN returns the database connection string
+func (c *Config) GetDatabaseDSN() string {
+	if c.Database.PgBouncerURL != "" {
+		return c.Database.PgBouncerURL
+	}
+	return fmt.Sprintf(
+		"host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		c.Database.Host,
+		c.Database.Port,
+		c.Database.User,
+		c.Database.Password,
+		c.Database.Name,
+		c.Database.SSLMode,
+	)
+}
+
+// GetRedisDSN returns the Redis connection string
+func (c *Config) GetRedisDSN() string {
+	if c.Redis.Password != "" {
+		return fmt.Sprintf("%s:%s", c.Redis.Host, c.Redis.Port)
+	}
+	return fmt.Sprintf("%s:%s", c.Redis.Host, c.Redis.Port)
+}
+
+// IsDevelopment returns true if environment is development
+func (c *Config) IsDevelopment() bool {
+	return c.Server.Environment == "development"
+}
+
+// IsProduction returns true if environment is production
+func (c *Config) IsProduction() bool {
+	return c.Server.Environment == "production"
+}

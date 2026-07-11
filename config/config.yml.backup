@@ -1,0 +1,95 @@
+server:
+  port: "7777"
+  host: "0.0.0.0"
+  environment: "development"
+  read_timeout: 10s
+  write_timeout: 10s
+  idle_timeout: 120s
+  graceful_shutdown_timeout: 30s
+
+database:
+  host: "localhost"
+  port: "5432"
+  user: "elysian"
+  password: "elysian123"
+  name: "elysian"
+  ssl_mode: "disable"
+  max_open_conns: 25
+  max_idle_conns: 25
+  conn_max_lifetime: 5m
+  conn_max_idle_time: 10m
+
+redis:
+  host: "localhost"
+  port: "6379"
+  password: ""
+  db: 0
+  pool_size: 10
+
+jwt:
+  secret: "dev_secret_key_change_in_production_min_32_characters"
+  access_token_expiry: 24h
+  refresh_token_expiry: 168h  # 7 days
+  issuer: "elysian"
+
+rabbitmq:
+  url: "amqp://guest:guest@localhost:5672/"
+  queue_name: "workflow_executions"
+  worker_count: 5
+
+storage:
+  endpoint: "http://localhost:9000"
+  access_key: ""
+  secret_key: ""
+  bucket: "elysian-flow-assets"
+  region: "us-east-1"
+  use_ssl: false
+
+ml:
+  service_url: "http://localhost:5000"
+  timeout: 30s
+  retry_count: 3
+  retry_delay: 1s
+
+security:
+  rate_limit_requests_per_minute: 60
+  rate_limit_burst: 10
+  cors_allowed_origins:
+    - "http://localhost:3000"
+    - "http://localhost:8081"
+    - "https://elysian.vercel.app"
+    - "https://*.vercel.app"
+  cors_allowed_methods:
+    - "GET"
+    - "POST"
+    - "PUT"
+    - "DELETE"
+    - "PATCH"
+    - "OPTIONS"
+  cors_allowed_headers:
+    - "Content-Type"
+    - "Authorization"
+    - "X-Requested-With"
+  cors_allow_credentials: true
+
+logging:
+  level: "debug"
+  format: "text"
+  output: "stdout"
+
+upload:
+  max_file_size: 10485760  # 10MB in bytes
+  allowed_file_types:
+    - ".pdf"
+    - ".csv"
+    - ".json"
+    - ".txt"
+    - ".png"
+    - ".jpg"
+
+blockchain:
+  enabled: true
+  rpc_url: "https://eth-sepolia.g.alchemy.com/v2/YphaD1AyIb34KtIp9xpXD"
+  contract_addr: "0x50d7A710C1a06b15Ee61669007279E03E4B2f233"
+  private_key: "0xae724f845dada2a194440be890855048d3f415423a8caae8fa0a54b6aaaec118"
+  network: "sepolia"

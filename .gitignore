@@ -1,0 +1,73 @@
+# ─── Binaries ────────────────────────────────────────────────────
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+tmp_server
+
+# ─── Test Artifacts ──────────────────────────────────────────────
+*.test
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+
+# ─── Logs ────────────────────────────────────────────────────────
+*.log
+
+# ─── Debug & Error Dumps ────────────────────────────────────────
+build_error*.txt
+error_output.txt
+goose_err*.txt
+goose_error*.txt
+seed_error*.txt
+server_error.txt
+pg_logs.txt
+ps.txt
+test_output.txt
+backend_response.json
+test_seed.sql
+
+# ─── Environment Variables ───────────────────────────────────────
+.env
+.env.local
+.env.production
+
+# ─── Dependency Directories ─────────────────────────────────────
+# vendor/
+
+# ─── Go Workspace ───────────────────────────────────────────────
+go.work
+go.work.sum
+
+# ─── Temporary Files ────────────────────────────────────────────
+tmp/
+*.tmp
+*.swp
+*.swo
+*~
+
+# ─── Editor / IDE ───────────────────────────────────────────────
+.idea/
+.vscode/
+*.iml
+
+# ─── OS Files ───────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── Postman ────────────────────────────────────────────────────
+postman/
+
+# ─── Cleanup Script ─────────────────────────────────────────────
+cleanup.bat
+server
+
+# ─── Junk / Temp files ──────────────────────────────────────────
+powershell.bat
+query_*.py
+nemesis_backup/
+scratch/
+test_server

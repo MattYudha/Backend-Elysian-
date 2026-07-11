@@ -1,0 +1,99 @@
+server:
+  port: "7777"
+  host: "0.0.0.0"
+  environment: "development"
+  read_timeout: 30s
+  write_timeout: 30s
+  idle_timeout: 120s
+  graceful_shutdown_timeout: 30s
+
+database:
+  host: "localhost"
+  port: "5432"
+  user: "postgres"
+  password: "postgres"
+  name: "elysian"
+  ssl_mode: "disable"
+  max_open_conns: 25
+  max_idle_conns: 25
+  conn_max_lifetime: 5m
+  conn_max_idle_time: 10m
+
+redis:
+  host: "localhost"
+  port: "6379"
+  password: ""
+  db: 0
+  pool_size: 10
+
+jwt:
+  secret: "elysian-development-secret-key-2024"
+  access_token_expiry: 24h
+  refresh_token_expiry: 720h
+  issuer: "elysian-api"
+
+rabbitmq:
+  url: ""
+  queue_name: ""
+  worker_count: 1
+
+storage:
+  endpoint: ""
+  access_key: ""
+  secret_key: ""
+  bucket: ""
+  region: ""
+  use_ssl: false
+
+ml:
+  service_url: ""
+  timeout: 30s
+  retry_count: 3
+  retry_delay: 1s
+
+security:
+  rate_limit_requests_per_minute: 60
+  rate_limit_burst: 10
+  cors_allowed_origins:
+    - "http://localhost:3000"
+  cors_allowed_methods:
+    - "GET"
+    - "POST"
+    - "PUT"
+    - "PATCH"
+    - "DELETE"
+    - "OPTIONS"
+  cors_allowed_headers:
+    - "Origin"
+    - "Content-Type"
+    - "Authorization"
+  cors_allow_credentials: true
+
+logging:
+  level: "debug"
+  format: "text"
+  output: "stdout"
+
+upload:
+  max_file_size: 10485760
+  allowed_file_types:
+    - ".pdf"
+    - ".doc"
+    - ".docx"
+
+ai:
+  deepseek_api_key: ""
+  openai_api_key: ""
+  gemini_api_key: ""
+  docling_url: ""
+  unstructured_url: ""
+
+blockchain:
+  enabled: true
+  rpc_url: "https://eth-sepolia.g.alchemy.com/v2/YphaD1AyIb34KtIp9xpXD"
+  contract_addr: "0x50d7A710C1a06b15Ee61669007279E03E4B2f233"
+  private_key: "0xae724f845dada2a194440be890855048d3f415423a8caae8fa0a54b6aaaec118"
+  network: "sepolia"
+  nft_contract_addr: "0xdF0CD6Fae64183ff9798276d633E5591a103CD3D"
+  pinata_api_key: "mock_pinata_api_key"
+  pinata_secret_key: "mock_pinata_secret_key"

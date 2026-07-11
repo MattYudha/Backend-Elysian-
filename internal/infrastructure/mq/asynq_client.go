@@ -1,0 +1,41 @@
+package mq
+
+import (
+	"crypto/tls"
+	"github.com/Elysian-Rebirth/backend-go/internal/config"
+	"github.com/hibiken/asynq"
+)
+
+type TaskQueue interface {
+	EnqueueTask(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
+	Close() error
+}
+
+type AsynqClient struct {
+	client *asynq.Client
+}
+
+func NewAsynqClient(cfg *config.Config) *AsynqClient {
+	redisConnOpt := asynq.RedisClientOpt{
+		Addr:     cfg.Redis.Host + ":" + cfg.Redis.Port,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+	}
+
+	if cfg.Redis.UseTLS {
+		redisConnOpt.TLSConfig = &tls.Config{
+			InsecureSkipVerify: true,
+		}
+	}
+
+	client := asynq.NewClient(redisConnOpt)
+	return &AsynqClient{client: client}
+}
+
+func (a *AsynqClient) EnqueueTask(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error) {
+	return a.client.Enqueue(task, opts...)
+}
+
+func (a *AsynqClient) Close() error {
+	return a.client.Close()
+}

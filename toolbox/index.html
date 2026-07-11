@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elysian Dev Toolbox</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent-primary: #3b82f6;
+            --accent-hover: #2563eb;
+            --success: #22c55e;
+            --warning: #eab308;
+            --danger: #ef4444;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            width: 100%;
+            padding: 2rem;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #334155;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(to right, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 1px solid #334155;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            border-color: var(--accent-primary);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            background: rgba(59, 130, 246, 0.1);
+            color: var(--accent-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 1rem;
+            font-size: 1.2rem;
+        }
+
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .card-content {
+            flex-grow: 1;
+            margin-bottom: 1.5rem;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        .card-footer {
+            margin-top: auto;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            background-color: var(--accent-primary);
+            color: white;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+            cursor: pointer;
+            box-sizing: border-box; /* Ensure padding doesn't affect width */
+        }
+
+        .btn:hover {
+            background-color: var(--accent-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background-color: transparent;
+            border-color: #334155;
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            background-color: rgba(255, 255, 255, 0.05);
+            border-color: var(--text-secondary);
+        }
+
+        .btn-icon {
+            margin-right: 0.5rem;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-top: 0.5rem;
+        }
+
+        .badge-go { background: rgba(0, 173, 216, 0.15); color: #29b6d8; border: 1px solid rgba(0, 173, 216, 0.2); }
+        .badge-db { background: rgba(51, 103, 145, 0.15); color: #60a5fa; border: 1px solid rgba(51, 103, 145, 0.2); }
+        /* Changed Redis to Purple to avoid Warning (yellow) or Error (red) associations */
+        .badge-redis { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.2); }
+        .badge-docker { background: rgba(36, 150, 237, 0.15); color: #38bdf8; border: 1px solid rgba(36, 150, 237, 0.2); }
+
+        .tech-stack {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 2rem;
+            border: 1px solid #334155;
+        }
+
+        .tech-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .tech-item {
+            display: flex;
+            align-items: center;
+            padding: 0.75rem;
+            background-color: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 0.75rem;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 3rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⚡ Elysian Dev Toolbox</h1>
+            <p class="subtitle">Local Development Environment & Control Plane</p>
+        </header>
+
+        <div class="grid">
+            <!-- Backend API -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="icon">🚀</div>
+                    <div>
+                        <h3 class="card-title">Backend API</h3>
+                        <span class="badge badge-go">Go / Fiber</span>
+                    </div>
+                </div>
+                <div class="card-content">
+                    Main API server providing REST endpoints, authentication, and workflow management.
+                    <br><br>
+                    Running on: <code style="color: #60a5fa">localhost:7777</code>
+                </div>
+                <div class="card-footer">
+                    <a href="http://localhost:7777/health" target="_blank" class="btn">
+                        <span>Check Health</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Swagger UI -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="icon">📄</div>
+                    <div>
+                        <h3 class="card-title">API Documentation</h3>
+                        <span class="badge badge-go">Swagger UI</span>
+                    </div>
+                </div>
+                <div class="card-content">
+                    Interactive API documentation and testing interface.
+                    <br><br>
+                    Running on: <code style="color: #60a5fa">localhost:7777</code>
+                </div>
+                <div class="card-footer">
+                    <a href="http://localhost:7777/swagger/index.html" target="_blank" class="btn btn-secondary">
+                        <span>Open Swagger UI</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Database -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="icon">🐘</div>
+                    <div>
+                        <h3 class="card-title">PostgreSQL</h3>
+                        <span class="badge badge-db">v14</span>
+                    </div>
+                </div>
+                <div class="card-content">
+                    Primary relational database for user data and workflow definitions.
+                    <br><br>
+                    Connection: <code style="color: #60a5fa">localhost:5432</code><br>
+                    User: <code style="color: #94a3b8">elysian</code>
+                </div>
+                <div class="card-footer">
+                    <button class="btn btn-secondary" onclick="navigator.clipboard.writeText('postgres://elysian:elysian123@localhost:5432/elysian')">
+                        <span>Copy Connection String</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Redis -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="icon">🔺</div>
+                    <div>
+                        <h3 class="card-title">Redis</h3>
+                        <span class="badge badge-redis">v7</span>
+                    </div>
+                </div>
+                <div class="card-content">
+                    In-memory data store for caching and session management.
+                    <br><br>
+                    Connection: <code style="color: #60a5fa">localhost:6379</code>
+                </div>
+                <div class="card-footer">
+                    <button class="btn btn-secondary" onclick="navigator.clipboard.writeText('redis://localhost:6379')">
+                        <span>Copy URL</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <section class="tech-stack">
+            <h2>🛠️ Tech Stack</h2>
+            <div class="tech-grid">
+                <div class="tech-item">
+                    <div class="dot" style="background-color: #00add8"></div>
+                    <span>Go 1.21+</span>
+                </div>
+                <div class="tech-item">
+                    <div class="dot" style="background-color: #00add8"></div>
+                    <span>Gin Web Framework</span>
+                </div>
+                <div class="tech-item">
+                    <div class="dot" style="background-color: #336791"></div>
+                    <span>PostgreSQL</span>
+                </div>
+                <div class="tech-item">
+                    <div class="dot" style="background-color: #dc382d"></div>
+                    <span>Redis</span>
+                </div>
+                <div class="tech-item">
+                    <div class="dot" style="background-color: #2496ed"></div>
+                    <span>Docker Compose</span>
+                </div>
+                <div class="tech-item">
+                    <div class="dot" style="background-color: #eab308"></div>
+                    <span>Postman</span>
+                </div>
+            </div>
+        </section>
+
+        <footer>
+            <p>Elysian Backend Development Environment &bull; Localhost</p>
+        </footer>
+    </div>
+</body>
+</html>
