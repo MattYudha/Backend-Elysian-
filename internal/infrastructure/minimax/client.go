@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -20,10 +22,19 @@ type Client struct {
 }
 
 func NewClient(apiKey string) *Client {
+	baseURL := os.Getenv("OPENCODE_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://ai-litellm-app.dev.ciptadusa.com/v1"
+	}
+	modelName := os.Getenv("OPENCODE_MODEL_NAME")
+	if modelName == "" {
+		modelName = "kr/deepseek-3.2"
+	}
+
 	return &Client{
 		apiKey:    apiKey,
-		baseURL:   "https://ai-litellm-app.dev.ciptadusa.com/v1",
-		modelName: "kr/deepseek-3.2",
+		baseURL:   baseURL,
+		modelName: modelName,
 		client: &http.Client{
 			Timeout: 60 * time.Second,
 		},
@@ -222,7 +233,6 @@ func (c *Client) GenerateContent(ctx context.Context, systemInstruction string, 
 		return "", Usage{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-litellm-api-key", c.apiKey)
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 
 	resp, err := c.client.Do(req)
@@ -232,7 +242,12 @@ func (c *Client) GenerateContent(ctx context.Context, systemInstruction string, 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", Usage{}, fmt.Errorf("Opencode API returned status: %d", resp.StatusCode)
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		errStr := strings.TrimSpace(string(bodyBytes))
+		if errStr == "" {
+			errStr = fmt.Sprintf("status code %d", resp.StatusCode)
+		}
+		return "", Usage{}, fmt.Errorf("Opencode API returned error (%d): %s", resp.StatusCode, errStr)
 	}
 
 	var chatResp ChatResponse
