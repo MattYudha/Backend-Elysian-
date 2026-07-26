@@ -12,7 +12,7 @@ WORKDIR /app
 
 # Copy source and build (sensitive files filtered by .dockerignore)
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -mod=vendor -a -installsuffix cgo -o server ./cmd/server/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o server ./cmd/server/main.go
 
 # ── Stage 2: Run (Production Optimized) ──────────────────────────
 FROM alpine:3.19
