@@ -1,6 +1,6 @@
 module github.com/Elysian-Rebirth/backend-go
 
-go 1.25.5
+go 1.24.0
 
 require (
 	github.com/Ingenimax/agent-sdk-go v0.2.38

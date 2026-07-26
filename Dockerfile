@@ -1,6 +1,6 @@
 # ── Stage 1: Build ───────────────────────────────────────────────
 # golang:alpine is Alpine-based (apk available) and tracks latest stable Go
-FROM golang:alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 # Git is needed by some go modules
 RUN apk add --no-cache git ca-certificates tzdata
