@@ -26,7 +26,6 @@ type MongoDBConfig struct {
 type AIConfig struct {
 	DeepSeekAPIKey string `mapstructure:"deepseek_api_key"`
 	OpenAIAPIKey   string `mapstructure:"openai_api_key"`
-	GeminiAPIKey   string `mapstructure:"gemini_api_key"`
 	OpencodeAPIKey string `mapstructure:"opencode_api_key"`
 	// Document parsing pipeline (enterprise PDF extraction)
 	DoclingURL      string `mapstructure:"docling_url"`      // e.g. http://localhost:5001

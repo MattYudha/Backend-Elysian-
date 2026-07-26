@@ -262,9 +262,6 @@ func overrideWithEnv(cfg *Config) {
 	if v := os.Getenv("AI_OPENAI_API_KEY"); v != "" {
 		cfg.AI.OpenAIAPIKey = v
 	}
-	if v := os.Getenv("AI_GEMINI_API_KEY"); v != "" {
-		cfg.AI.GeminiAPIKey = v
-	}
 	if v := os.Getenv("AI_OPENCODE_API_KEY"); v != "" {
 		cfg.AI.OpencodeAPIKey = v
 	}

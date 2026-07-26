@@ -14,12 +14,12 @@ import (
 // It embeds the query via Gemini, then delegates to the repository's HybridSearch
 // which applies HNSW semantic search + PostgreSQL FTS + RRF fusion — all scoped to a tenant.
 type RAGSearchHandler struct {
-	docRepo      domain.DocumentRepository
-	geminiAPIKey string // read from config, never hardcoded
+	docRepo        domain.DocumentRepository
+	opencodeAPIKey string // read from config, never hardcoded
 }
 
-func NewRAGSearchHandler(docRepo domain.DocumentRepository, geminiAPIKey string) *RAGSearchHandler {
-	return &RAGSearchHandler{docRepo: docRepo, geminiAPIKey: geminiAPIKey}
+func NewRAGSearchHandler(docRepo domain.DocumentRepository, opencodeAPIKey string) *RAGSearchHandler {
+	return &RAGSearchHandler{docRepo: docRepo, opencodeAPIKey: opencodeAPIKey}
 }
 
 type SearchRequest struct {
@@ -110,6 +110,6 @@ func (h *RAGSearchHandler) Search(c *gin.Context) {
 // getQueryEmbedding calls Gemini text-embedding-004 to produce a 1536-dim vector
 // for the user's query. This vector is then used in the HNSW cosine similarity search.
 func (h *RAGSearchHandler) getQueryEmbedding(ctx context.Context, query string) ([]float32, error) {
-	minimaxClient := minimax.NewClient(h.geminiAPIKey)
+	minimaxClient := minimax.NewClient(h.opencodeAPIKey)
 	return minimaxClient.EmbedQuery(ctx, query)
 }

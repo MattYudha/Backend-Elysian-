@@ -29,18 +29,18 @@ type WorkflowUseCase interface {
 }
 
 type workflowUseCase struct {
-	repo         repository.WorkflowRepository
-	docRepo      domain.DocumentRepository
-	auditRepo    domain.AuditRepository
-	geminiAPIKey string
+	repo           repository.WorkflowRepository
+	docRepo        domain.DocumentRepository
+	auditRepo      domain.AuditRepository
+	opencodeAPIKey string
 }
 
-func NewWorkflowUseCase(repo repository.WorkflowRepository, docRepo domain.DocumentRepository, auditRepo domain.AuditRepository, geminiAPIKey string) *workflowUseCase {
+func NewWorkflowUseCase(repo repository.WorkflowRepository, docRepo domain.DocumentRepository, auditRepo domain.AuditRepository, opencodeAPIKey string) *workflowUseCase {
 	return &workflowUseCase{
-		repo:         repo,
-		docRepo:      docRepo,
-		auditRepo:    auditRepo,
-		geminiAPIKey: geminiAPIKey,
+		repo:           repo,
+		docRepo:        docRepo,
+		auditRepo:      auditRepo,
+		opencodeAPIKey: opencodeAPIKey,
 	}
 }
 
@@ -175,7 +175,7 @@ func (uc *workflowUseCase) ExecutePipeline(ctx context.Context, tenantID uuid.UU
 	workflowEngine := engine.NewWorkflowEngine()
 	workflowEngine.Register("llm_agent", handlers.NewLLMAgentHandler())
 
-	ragHandler, err := handlers.NewRAGRetrieverHandler(uc.docRepo, uc.geminiAPIKey)
+	ragHandler, err := handlers.NewRAGRetrieverHandler(uc.docRepo, uc.opencodeAPIKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to init RAG retriever: %w", err)
 	}

@@ -16,15 +16,13 @@ import (
 type ChatHandler struct {
 	chatRepo       domain.ChatRepository
 	docRepo        domain.DocumentRepository
-	geminiAPIKey   string
 	opencodeAPIKey string
 }
 
-func NewChatHandler(chatRepo domain.ChatRepository, docRepo domain.DocumentRepository, geminiAPIKey string, opencodeAPIKey string) *ChatHandler {
+func NewChatHandler(chatRepo domain.ChatRepository, docRepo domain.DocumentRepository, opencodeAPIKey string) *ChatHandler {
 	return &ChatHandler{
 		chatRepo:       chatRepo,
 		docRepo:        docRepo,
-		geminiAPIKey:   geminiAPIKey,
 		opencodeAPIKey: opencodeAPIKey,
 	}
 }
@@ -162,12 +160,7 @@ func (h *ChatHandler) SendMessage(c *gin.Context) {
 
 	// 2. Perform RAG query enhancement if API Key is available
 	var contextText string
-	activeKey := h.opencodeAPIKey
-	if activeKey == "" {
-		activeKey = h.geminiAPIKey
-	}
-
-	if activeKey != "" {
+	if h.opencodeAPIKey != "" {
 		embedding, err := h.getQueryEmbedding(c.Request.Context(), req.Message)
 		if err == nil {
 			results, err := h.docRepo.HybridSearch(c.Request.Context(), domain.HybridSearchParams{
@@ -187,10 +180,10 @@ func (h *ChatHandler) SendMessage(c *gin.Context) {
 		}
 	}
 
-	// 3. Query Opencode/LiteLLM LLM
+	// 3. Query Opencode LLM
 	var modelResponse string
-	if activeKey != "" {
-		minimaxClient := minimax.NewClient(activeKey)
+	if h.opencodeAPIKey != "" {
+		minimaxClient := minimax.NewClient(h.opencodeAPIKey)
 		
 		// Get previous message history for conversational memory
 		history, _ := h.chatRepo.ListMessages(c.Request.Context(), sessionID)
@@ -264,10 +257,6 @@ func (h *ChatHandler) SendMessage(c *gin.Context) {
 }
 
 func (h *ChatHandler) getQueryEmbedding(ctx context.Context, query string) ([]float32, error) {
-	activeKey := h.opencodeAPIKey
-	if activeKey == "" {
-		activeKey = h.geminiAPIKey
-	}
-	minimaxClient := minimax.NewClient(activeKey)
+	minimaxClient := minimax.NewClient(h.opencodeAPIKey)
 	return minimaxClient.EmbedQuery(ctx, query)
 }

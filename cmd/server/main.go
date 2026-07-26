@@ -199,13 +199,13 @@ func main() {
 	workflowRepo := postgresRepo.NewWorkflowRepository(db)
 	docRepo := postgresRepo.NewDocumentRepository(db)
 	auditRepo := postgresRepo.NewAuditRepository(db)
-	workflowUseCase := workflow.NewWorkflowUseCase(workflowRepo, docRepo, auditRepo, cfg.AI.GeminiAPIKey)
+	workflowUseCase := workflow.NewWorkflowUseCase(workflowRepo, docRepo, auditRepo, cfg.AI.OpencodeAPIKey)
 	workflowHandler := handler.NewWorkflowHandler(workflowUseCase)
 
 	// Infrastructure Components
-	agentFactory, err := agent.NewAgentFactory(context.Background(), cfg.AI.GeminiAPIKey, cfg.Redis.Host+":"+cfg.Redis.Port)
+	agentFactory, err := agent.NewAgentFactory(context.Background(), cfg.AI.OpencodeAPIKey, cfg.Redis.Host+":"+cfg.Redis.Port)
 	if err != nil {
-		log.Printf("[WARN] Agent Factory initialization failed (no Gemini API Key?): %v — DAG engine will run in mock mode", err)
+		log.Printf("[WARN] Agent Factory initialization failed (no Opencode API Key?): %v — DAG engine will run in mock mode", err)
 		agentFactory = nil
 	} else {
 		log.Printf("Agent Factory initialized")
@@ -239,10 +239,10 @@ func main() {
 
 	authMiddleware := middleware.AuthMiddleware(jwtSvc, userRepo, roleRepo, redisCache.(*cache.RedisCache).GetClient(), db)
 
-	// RAG Search Handler — uses the already-initialized docRepo and Gemini key from config
+	// RAG Search Handler — uses the already-initialized docRepo and Opencode key from config
 	var ragSearchHandler *handler.RAGSearchHandler
-	if cfg.AI.GeminiAPIKey != "" {
-		ragSearchHandler = handler.NewRAGSearchHandler(postgresRepo.NewDocumentRepository(db), cfg.AI.GeminiAPIKey)
+	if cfg.AI.OpencodeAPIKey != "" {
+		ragSearchHandler = handler.NewRAGSearchHandler(postgresRepo.NewDocumentRepository(db), cfg.AI.OpencodeAPIKey)
 	}
 
 	// Blockchain Service (optional — only if configured)
@@ -296,10 +296,10 @@ func main() {
 	// Register RAG handlers if S3 is active
 	if s3Service != nil {
 		docParser := parsing.NewDocumentParser(cfg.AI.DoclingURL, cfg.AI.UnstructuredURL)
-		docTaskHandler := rag.NewDocumentTaskHandler(docRepo, s3Service, docParser, cfg.AI.GeminiAPIKey, mongoStaging)
+		docTaskHandler := rag.NewDocumentTaskHandler(docRepo, s3Service, docParser, cfg.AI.OpencodeAPIKey, mongoStaging)
 		asynqWorker.RegisterHandler(rag.TypeParseDocument, docTaskHandler.HandleParseDocument)
 		asynqWorker.RegisterHandler(rag.TypeEmbedDocument, docTaskHandler.HandleEmbedDocument)
-		log.Printf("Asynq RAG Worker handlers registered (Gemini embedding enabled: %v)", cfg.AI.GeminiAPIKey != "")
+		log.Printf("Asynq RAG Worker handlers registered (Opencode embedding enabled: %v)", cfg.AI.OpencodeAPIKey != "")
 	}
 
 	// Register Swarm task handlers
@@ -346,7 +346,7 @@ func main() {
 	dashboardHandler := handler.NewDashboardHandler(dashboardUseCase)
 
 	chatRepo := postgresRepo.NewChatRepository(db)
-	chatHandler := handler.NewChatHandler(chatRepo, docRepo, cfg.AI.GeminiAPIKey, cfg.AI.OpencodeAPIKey)
+	chatHandler := handler.NewChatHandler(chatRepo, docRepo, cfg.AI.OpencodeAPIKey)
 
 	agentRepo := postgresRepo.NewAgentRepository(db)
 	agentHandler := handler.NewAgentHandler(agentRepo)

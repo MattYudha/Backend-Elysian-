@@ -80,26 +80,26 @@ func NewEmbedDocumentTask(documentID, tenantID string, category string) (*asynq.
 
 // DocumentTaskHandler is the concrete Asynq handler for the split RAG pipeline.
 type DocumentTaskHandler struct {
-	docRepo      domain.DocumentRepository
-	s3           *storage.S3Service
-	parser       *parsing.DocumentParser
-	geminiAPIKey string
-	mongoClient  *database.MongoClient
+	docRepo        domain.DocumentRepository
+	s3             *storage.S3Service
+	parser         *parsing.DocumentParser
+	opencodeAPIKey string
+	mongoClient    *database.MongoClient
 }
 
 func NewDocumentTaskHandler(
 	docRepo domain.DocumentRepository,
 	s3 *storage.S3Service,
 	parser *parsing.DocumentParser,
-	geminiAPIKey string,
+	opencodeAPIKey string,
 	mongoClient *database.MongoClient,
 ) *DocumentTaskHandler {
 	return &DocumentTaskHandler{
-		docRepo:      docRepo,
-		s3:           s3,
-		parser:       parser,
-		geminiAPIKey: geminiAPIKey,
-		mongoClient:  mongoClient,
+		docRepo:        docRepo,
+		s3:             s3,
+		parser:         parser,
+		opencodeAPIKey: opencodeAPIKey,
+		mongoClient:    mongoClient,
 	}
 }
 
@@ -273,6 +273,6 @@ func (h *DocumentTaskHandler) failDoc(ctx context.Context, docID uuid.UUID, reas
 
 // batchEmbed sends all chunk texts to MiniMax embo-01 in a single batch call.
 func (h *DocumentTaskHandler) batchEmbed(ctx context.Context, texts []string) ([][]float32, error) {
-	minimaxClient := minimax.NewClient(h.geminiAPIKey)
+	minimaxClient := minimax.NewClient(h.opencodeAPIKey)
 	return minimaxClient.EmbedBatch(ctx, texts, "db")
 }

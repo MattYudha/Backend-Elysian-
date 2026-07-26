@@ -232,7 +232,7 @@ func (c *Client) GenerateContent(ctx context.Context, systemInstruction string, 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", Usage{}, fmt.Errorf("minimax api returned status: %d", resp.StatusCode)
+		return "", Usage{}, fmt.Errorf("Opencode API returned status: %d", resp.StatusCode)
 	}
 
 	var chatResp ChatResponse
@@ -241,11 +241,11 @@ func (c *Client) GenerateContent(ctx context.Context, systemInstruction string, 
 	}
 
 	if chatResp.BaseResp.StatusCode != 0 {
-		return "", Usage{}, fmt.Errorf("minimax api error: %s (code %d)", chatResp.BaseResp.StatusMsg, chatResp.BaseResp.StatusCode)
+		return "", Usage{}, fmt.Errorf("Opencode API error: %s (code %d)", chatResp.BaseResp.StatusMsg, chatResp.BaseResp.StatusCode)
 	}
 
 	if len(chatResp.Choices) == 0 {
-		return "", Usage{}, fmt.Errorf("no response text returned from minimax")
+		return "", Usage{}, fmt.Errorf("no response text returned from Opencode")
 	}
 
 	content := chatResp.Choices[0].Message.Content
