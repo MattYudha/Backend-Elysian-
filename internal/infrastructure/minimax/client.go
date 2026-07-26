@@ -28,7 +28,7 @@ func NewClient(apiKey string) *Client {
 	}
 	modelName := os.Getenv("OPENCODE_MODEL_NAME")
 	if modelName == "" {
-		modelName = "kr/deepseek-3.2"
+		modelName = "deepseek-chat"
 	}
 
 	return &Client{
