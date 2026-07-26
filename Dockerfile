@@ -10,7 +10,11 @@ ENV GOTOOLCHAIN=auto
 
 WORKDIR /app
 
-# Copy source and build (sensitive files filtered by .dockerignore)
+# Copy module manifests and download dependencies
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code and build binary
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o server ./cmd/server/main.go
 
