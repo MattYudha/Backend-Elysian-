@@ -1,0 +1,431 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+	"time"
+
+	_ "github.com/Elysian-Rebirth/backend-go/docs"
+	"github.com/Elysian-Rebirth/backend-go/internal/config"
+	"github.com/Elysian-Rebirth/backend-go/internal/delivery/http/handler"
+	"github.com/Elysian-Rebirth/backend-go/internal/delivery/http/routes"
+	"github.com/Elysian-Rebirth/backend-go/migrations"
+	"github.com/pressly/goose/v3"
+	"gorm.io/gorm"
+	"github.com/hibiken/asynq"
+
+	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/agent"
+	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/blockchain"
+	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/cache"
+	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/database"
+	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/mq"
+	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/parsing"
+	"github.com/Elysian-Rebirth/backend-go/internal/infrastructure/storage"
+	"github.com/Elysian-Rebirth/backend-go/internal/middleware"
+	postgresRepo "github.com/Elysian-Rebirth/backend-go/internal/repository/postgres"
+	mongodbRepo "github.com/Elysian-Rebirth/backend-go/internal/repository/mongodb"
+	"github.com/Elysian-Rebirth/backend-go/internal/usecase/auth"
+	"github.com/Elysian-Rebirth/backend-go/internal/usecase/dashboard"
+	documentUsecase "github.com/Elysian-Rebirth/backend-go/internal/usecase/document"
+	"github.com/Elysian-Rebirth/backend-go/internal/usecase/engine"
+	"github.com/Elysian-Rebirth/backend-go/internal/usecase/rag"
+	"github.com/Elysian-Rebirth/backend-go/internal/usecase/swarm"
+	"github.com/Elysian-Rebirth/backend-go/internal/usecase/workflow"
+	actionCenterUsecase "github.com/Elysian-Rebirth/backend-go/internal/usecase/action_center"
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
+)
+
+// @title           Elysian Backend API
+// @version         1.0.0
+// @description     Elysian Backend API provides user authentication, management, and health check endpoints. Built with Go and Gin framework.
+// @termsOfService  http://swagger.io/terms/
+
+// @contact.name    API Support
+// @contact.url     http://www.swagger.io/support
+// @contact.email   support@swagger.io
+
+// @license.name    Apache 2.0
+// @license.url     http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host            localhost:7777
+// @BasePath        /
+
+// @schemes         http https
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+func main() {
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
+
+	log.Printf("Configuration loaded")
+	log.Printf("Environment: %s", cfg.Server.Environment)
+
+	var db *gorm.DB
+	for i := 1; i <= 15; i++ {
+		db, err = database.NewPostgresDB(cfg)
+		if err == nil {
+			if err = database.HealthCheck(db); err == nil {
+				break
+			}
+		}
+		log.Printf("Waiting for database to be ready... (Attempt %d/15): %v", i, err)
+		time.Sleep(3 * time.Second)
+	}
+	if err != nil {
+		log.Fatalf("Failed to connect to database after retries: %v", err)
+	}
+	log.Printf("Database is healthy")
+
+	// Run Goose Migrations automatically
+	sqlDB, err := db.DB()
+	if err == nil {
+		goose.SetBaseFS(migrations.EmbedMigrations)
+
+		if err := goose.SetDialect("postgres"); err != nil {
+			log.Fatalf("Goose set dialect failed: %v", err)
+		}
+
+		if err := goose.Up(sqlDB, "."); err != nil {
+			log.Fatalf("Goose up failed: %v", err)
+		}
+		log.Printf("Database migrations applied successfully")
+		
+		if err := database.EnsurePartitions(db); err != nil {
+			log.Fatalf("Failed to ensure database partitions: %v", err)
+		}
+		log.Printf("Database partitions verified")
+
+		// Seed administrator accounts and default roles
+		if err := database.SeedAdmin(db); err != nil {
+			log.Fatalf("Failed to seed admin accounts: %v", err)
+		}
+		log.Printf("Database admin seed completed successfully")
+	} else {
+		log.Fatalf("Failed to get DB instance for goose: %v", err)
+	}
+
+	var redisCache cache.Cache
+	for i := 1; i <= 15; i++ {
+		redisCache, err = cache.NewRedisCache(cfg)
+		if err == nil {
+			break
+		}
+		log.Printf("Waiting for Redis to be ready... (Attempt %d/15): %v", i, err)
+		time.Sleep(3 * time.Second)
+	}
+	if err != nil {
+		log.Fatalf("failed to connect to Redis after retries: %v", err)
+	}
+	log.Printf("Redis connection established")
+
+	mongoStaging, err := database.NewMongoClient(cfg)
+	if err != nil {
+		log.Fatalf("failed to connect to MongoDB: %v", err)
+	}
+	log.Printf("MongoDB Staging client established")
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = mongoStaging.Close(ctx)
+	}()
+
+	userRepo := postgresRepo.NewUserRepository(db)
+	roleRepo := postgresRepo.NewRoleRepository(db, redisCache.(*cache.RedisCache).GetClient())
+	_ = roleRepo
+
+	log.Printf("Repositories initialized")
+
+	// Set GIN mode: respect GIN_MODE env var directly, or fall back to IsProduction
+	if os.Getenv("GIN_MODE") == "release" || cfg.IsProduction() {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	router := gin.New()
+	router.Use(middleware.Recovery())
+	router.Use(middleware.Logger())
+
+	// CORS: use AllowOriginFunc for maximum flexibility and reliability.
+	// AllowOriginFunc + AllowCredentials: true is the most robust approach.
+	// This is compiled into the binary and cannot be broken by Docker cache.
+	configOrigins := cfg.Security.CORSAllowedOrigins
+	router.Use(cors.New(cors.Config{
+		AllowOriginFunc: func(origin string) bool {
+			// Always allow localhost for development
+			if strings.HasPrefix(origin, "http://localhost") || strings.HasPrefix(origin, "http://127.0.0.1") {
+				return true
+			}
+			// Always allow all Vercel preview and production deployments
+			if strings.HasSuffix(origin, ".vercel.app") {
+				return true
+			}
+			// Allow config-based origins (from config.yml)
+			for _, o := range configOrigins {
+				if o == origin {
+					return true
+				}
+			}
+			return false
+		},
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Requested-With", "Accept", "X-Tenant-ID", "X-XSRF-TOKEN", "X-CSRF-Token"},
+		ExposeHeaders:    []string{"Content-Length", "Authorization"},
+		AllowCredentials: true, // hardcoded — required for login session
+		MaxAge:           12 * time.Hour,
+	}))
+	log.Printf("CORS configured: AllowOriginFunc=*.vercel.app + localhost + %d config origins, AllowCredentials=true", len(configOrigins))
+
+	passwordSvc := auth.NewPasswordService()
+	jwtSvc := auth.NewJWTService(cfg.JWT)
+	cacheKeyBuilder := cache.NewCacheKeyBuilder("elysian")
+
+	authUseCase := auth.NewAuthUseCase(userRepo, passwordSvc, jwtSvc, redisCache, cacheKeyBuilder)
+
+	healthHandler := handler.NewHealthHandler(cfg, db, redisCache)
+	userHandler := handler.NewUserHandler(userRepo)
+	authHandler := handler.NewAuthHandler(authUseCase, cfg.IsProduction(), db)
+
+	// Workflow Components
+	workflowRepo := postgresRepo.NewWorkflowRepository(db)
+	docRepo := postgresRepo.NewDocumentRepository(db)
+	auditRepo := postgresRepo.NewAuditRepository(db)
+	workflowUseCase := workflow.NewWorkflowUseCase(workflowRepo, docRepo, auditRepo, cfg.AI.GeminiAPIKey)
+	workflowHandler := handler.NewWorkflowHandler(workflowUseCase)
+
+	// Infrastructure Components
+	agentFactory, err := agent.NewAgentFactory(context.Background(), cfg.AI.GeminiAPIKey, cfg.Redis.Host+":"+cfg.Redis.Port)
+	if err != nil {
+		log.Printf("[WARN] Agent Factory initialization failed (no Gemini API Key?): %v — DAG engine will run in mock mode", err)
+		agentFactory = nil
+	} else {
+		log.Printf("Agent Factory initialized")
+	}
+
+	// Execution Components
+	executionRepo := postgresRepo.NewExecutionRepository(db)
+	wfEngine := engine.NewWorkflowEngine()
+	executionHandler := handler.NewExecutionHandler(wfEngine, executionRepo, workflowRepo)
+
+	// S3 Storage + Document Components
+	var documentHandler *handler.DocumentHandler
+	asynqClient := mq.NewAsynqClient(cfg)
+
+	s3Service, s3Err := storage.NewS3Service(&cfg.Storage)
+	if s3Err != nil {
+		log.Printf("[WARN] S3 not configured (%v) — document upload running in mock/local mode", s3Err)
+		s3Service = nil
+	} else {
+		// Ensure the bucket exists on startup
+		if err := s3Service.EnsureBucket(context.Background()); err != nil {
+			log.Printf("[WARN] Could not ensure S3 bucket: %v", err)
+		}
+	}
+
+	// Always initialize docUsecase and documentHandler to prevent panic dereferences
+	docUsecase := documentUsecase.NewDocumentUsecase(docRepo, s3Service, asynqClient, mongoStaging)
+	documentHandler = handler.NewDocumentHandler(docUsecase)
+
+	// Asynq worker is initialized and started below to centralize handler registrations for both RAG and Swarm tasks.
+
+	authMiddleware := middleware.AuthMiddleware(jwtSvc, userRepo, roleRepo, redisCache.(*cache.RedisCache).GetClient(), db)
+
+	// RAG Search Handler — uses the already-initialized docRepo and Gemini key from config
+	var ragSearchHandler *handler.RAGSearchHandler
+	if cfg.AI.GeminiAPIKey != "" {
+		ragSearchHandler = handler.NewRAGSearchHandler(postgresRepo.NewDocumentRepository(db), cfg.AI.GeminiAPIKey)
+	}
+
+	// Blockchain Service (optional — only if configured)
+	var bcService *blockchain.AuditTrailService
+	var nftService *blockchain.NFTService
+	if cfg.Blockchain.Enabled && cfg.Blockchain.RPCURL != "" {
+		var err error
+		bcService, err = blockchain.NewAuditTrailService(
+			cfg.Blockchain.RPCURL,
+			cfg.Blockchain.ContractAddr,
+			cfg.Blockchain.PrivateKey,
+			cfg.Blockchain.Network,
+		)
+		if err != nil {
+			log.Printf("[WARN] Blockchain service initialization failed: %v — audit trail will store hashes locally only", err)
+			bcService = nil
+		} else {
+			log.Printf("Blockchain service connected: network=%s, contract=%s", cfg.Blockchain.Network, cfg.Blockchain.ContractAddr)
+		}
+
+		if cfg.Blockchain.NFTContractAddr != "" {
+			nftService, err = blockchain.NewNFTService(
+				cfg.Blockchain.RPCURL,
+				cfg.Blockchain.NFTContractAddr,
+				cfg.Blockchain.PrivateKey,
+				cfg.Blockchain.PinataAPIKey,
+				cfg.Blockchain.PinataSecretKey,
+				cfg.Blockchain.Network,
+			)
+			if err != nil {
+				log.Printf("[WARN] NFT blockchain service initialization failed: %v — digital certificates will not be minted", err)
+				nftService = nil
+			} else {
+				log.Printf("NFT blockchain service connected: network=%s, contract=%s", cfg.Blockchain.Network, cfg.Blockchain.NFTContractAddr)
+			}
+		}
+
+		defer func() {
+			if bcService != nil {
+				bcService.Close()
+			}
+		}()
+	}
+
+	// Swarm Components
+	swarmRepo := postgresRepo.NewSwarmRepository(db)
+
+	// Initialize Asynq Worker and register all handlers (RAG and Swarm)
+	asynqWorker := mq.NewAsynqWorker(cfg)
+
+	// Register RAG handlers if S3 is active
+	if s3Service != nil {
+		docParser := parsing.NewDocumentParser(cfg.AI.DoclingURL, cfg.AI.UnstructuredURL)
+		docTaskHandler := rag.NewDocumentTaskHandler(docRepo, s3Service, docParser, cfg.AI.GeminiAPIKey, mongoStaging)
+		asynqWorker.RegisterHandler(rag.TypeParseDocument, docTaskHandler.HandleParseDocument)
+		asynqWorker.RegisterHandler(rag.TypeEmbedDocument, docTaskHandler.HandleEmbedDocument)
+		log.Printf("Asynq RAG Worker handlers registered (Gemini embedding enabled: %v)", cfg.AI.GeminiAPIKey != "")
+	}
+
+	// Register Swarm task handlers
+	swarmTaskHandler := swarm.NewSwarmTaskHandler(swarmRepo, bcService, redisCache)
+	asynqWorker.RegisterHandler(swarm.TypeCommitSwarmToBlockchain, swarmTaskHandler.HandleCommitSwarmToBlockchain)
+	log.Printf("Asynq Swarm Worker handlers registered")
+
+	// Register ML feedback loop task handler
+	asynqWorker.RegisterHandler("ml:update_memory_pack", func(ctx context.Context, t *asynq.Task) error {
+		log.Printf("[MQ-Asynq] Processing ml:update_memory_pack task from Redis Asynq...")
+		if rc, ok := redisCache.(*cache.RedisCache); ok {
+			err := rc.GetClient().LPush(ctx, "ml:update_memory_pack", t.Payload()).Err()
+			if err != nil {
+				log.Printf("[MQ-Asynq] ERROR: Failed to LPush task payload to Redis: %v", err)
+				return err
+			}
+			log.Printf("[MQ-Asynq] Successfully forwarded task payload to Redis list 'ml:update_memory_pack'")
+		} else {
+			log.Printf("[MQ-Asynq] ERROR: Cache is not Redis")
+		}
+		return nil
+	})
+	log.Printf("Asynq ML Feedback loop handler registered")
+
+	// Start the background Asynq worker process
+	go func() {
+		if err := asynqWorker.Start(); err != nil {
+			log.Printf("[WARN] Asynq Worker failed to start: %v", err)
+		}
+	}()
+
+	overrideRepo := mongodbRepo.NewOverrideRepository(mongoStaging)
+	swarmUsecase := swarm.NewSwarmUsecase(swarmRepo, overrideRepo, redisCache, bcService, asynqClient, nftService)
+	swarmHandler := handler.NewSwarmHandler(swarmUsecase, redisCache)
+	blockchainHandler := handler.NewBlockchainHandler(swarmRepo, bcService)
+
+	// Action Center Components
+	actionItemRepo := postgresRepo.NewActionItemRepository(db)
+	actionCenterUseCase := actionCenterUsecase.NewActionCenterUseCase(actionItemRepo, asynqClient)
+	actionCenterHandler := handler.NewActionCenterHandler(actionCenterUseCase)
+
+	// Dashboard, Chat & Agent Components
+	dashboardUseCase := dashboard.NewDashboardUseCase(db)
+	dashboardHandler := handler.NewDashboardHandler(dashboardUseCase)
+
+	chatRepo := postgresRepo.NewChatRepository(db)
+	chatHandler := handler.NewChatHandler(chatRepo, docRepo, cfg.AI.GeminiAPIKey)
+
+	agentRepo := postgresRepo.NewAgentRepository(db)
+	agentHandler := handler.NewAgentHandler(agentRepo)
+
+	tenantHandler := handler.NewTenantHandler(db)
+	dataTypeHandler := handler.NewDataTypeHandler(db)
+	nemesisHandler := handler.NewNemesisHandler()
+	guardrailHandler := handler.NewGuardrailHandler(redisCache)
+
+	routes.SetupRoutes(
+		router,
+		healthHandler,
+		userHandler,
+		authHandler,
+		workflowHandler,
+		executionHandler,
+		documentHandler,
+		ragSearchHandler,
+		swarmHandler,
+		dashboardHandler,
+		chatHandler,
+		agentHandler,
+		tenantHandler,
+		dataTypeHandler,
+		blockchainHandler,
+		nemesisHandler,
+		guardrailHandler,
+		actionCenterHandler,
+		authMiddleware,
+	)
+
+	addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
+	srv := &http.Server{
+		Addr:         addr,
+		Handler:      router,
+		ReadTimeout:  cfg.Server.ReadTimeout,
+		WriteTimeout: cfg.Server.WriteTimeout,
+		IdleTimeout:  cfg.Server.IdleTimeout,
+	}
+
+	go func() {
+		log.Printf("Server starting on %s", addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server failed to start: %v", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
+
+	log.Println("Shutting down server...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.Server.GracefulShutdownTimeout)
+	defer cancel()
+
+	if agentFactory != nil {
+		if err := agentFactory.Close(); err != nil {
+			log.Printf("Error closing AgentFactory: %v", err)
+		} else {
+			log.Printf("AgentFactory (GenAI) connections closed")
+		}
+	}
+
+	if err := redisCache.Close(); err != nil {
+		log.Printf("Error closing Redis: %v", err)
+	} else {
+		log.Printf("Redis connection closed")
+	}
+
+	if err := database.Close(db); err != nil {
+		log.Printf("Error closing database: %v", err)
+	} else {
+		log.Println("Database closed")
+	}
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("Server forced to shutdown: %v", err)
+	}
+
+	log.Println("Server stopped gracefully")
+}
