@@ -14,16 +14,18 @@ import (
 )
 
 type ChatHandler struct {
-	chatRepo     domain.ChatRepository
-	docRepo      domain.DocumentRepository
-	geminiAPIKey string
+	chatRepo       domain.ChatRepository
+	docRepo        domain.DocumentRepository
+	geminiAPIKey   string
+	opencodeAPIKey string
 }
 
-func NewChatHandler(chatRepo domain.ChatRepository, docRepo domain.DocumentRepository, geminiAPIKey string) *ChatHandler {
+func NewChatHandler(chatRepo domain.ChatRepository, docRepo domain.DocumentRepository, geminiAPIKey string, opencodeAPIKey string) *ChatHandler {
 	return &ChatHandler{
-		chatRepo:     chatRepo,
-		docRepo:      docRepo,
-		geminiAPIKey: geminiAPIKey,
+		chatRepo:       chatRepo,
+		docRepo:        docRepo,
+		geminiAPIKey:   geminiAPIKey,
+		opencodeAPIKey: opencodeAPIKey,
 	}
 }
 
@@ -160,7 +162,12 @@ func (h *ChatHandler) SendMessage(c *gin.Context) {
 
 	// 2. Perform RAG query enhancement if API Key is available
 	var contextText string
-	if h.geminiAPIKey != "" {
+	activeKey := h.opencodeAPIKey
+	if activeKey == "" {
+		activeKey = h.geminiAPIKey
+	}
+
+	if activeKey != "" {
 		embedding, err := h.getQueryEmbedding(c.Request.Context(), req.Message)
 		if err == nil {
 			results, err := h.docRepo.HybridSearch(c.Request.Context(), domain.HybridSearchParams{
@@ -180,10 +187,10 @@ func (h *ChatHandler) SendMessage(c *gin.Context) {
 		}
 	}
 
-	// 3. Query MiniMax LLM
+	// 3. Query Opencode/LiteLLM LLM
 	var modelResponse string
-	if h.geminiAPIKey != "" {
-		minimaxClient := minimax.NewClient(h.geminiAPIKey)
+	if activeKey != "" {
+		minimaxClient := minimax.NewClient(activeKey)
 		
 		// Get previous message history for conversational memory
 		history, _ := h.chatRepo.ListMessages(c.Request.Context(), sessionID)
@@ -237,7 +244,7 @@ func (h *ChatHandler) SendMessage(c *gin.Context) {
 			_ = h.chatRepo.LogTokenUsage(c.Request.Context(), session.TenantID, "MiniMax-M2.5", usage.PromptTokens, usage.CompletionTokens)
 		}
 	} else {
-		modelResponse = "AI Service is not configured (missing MiniMax API Key)."
+		modelResponse = "AI Service is not configured (missing Opencode API Key)."
 	}
 
 	// 4. Save model response to database
@@ -257,6 +264,10 @@ func (h *ChatHandler) SendMessage(c *gin.Context) {
 }
 
 func (h *ChatHandler) getQueryEmbedding(ctx context.Context, query string) ([]float32, error) {
-	minimaxClient := minimax.NewClient(h.geminiAPIKey)
+	activeKey := h.opencodeAPIKey
+	if activeKey == "" {
+		activeKey = h.geminiAPIKey
+	}
+	minimaxClient := minimax.NewClient(activeKey)
 	return minimaxClient.EmbedQuery(ctx, query)
 }

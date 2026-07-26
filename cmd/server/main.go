@@ -346,7 +346,7 @@ func main() {
 	dashboardHandler := handler.NewDashboardHandler(dashboardUseCase)
 
 	chatRepo := postgresRepo.NewChatRepository(db)
-	chatHandler := handler.NewChatHandler(chatRepo, docRepo, cfg.AI.GeminiAPIKey)
+	chatHandler := handler.NewChatHandler(chatRepo, docRepo, cfg.AI.GeminiAPIKey, cfg.AI.OpencodeAPIKey)
 
 	agentRepo := postgresRepo.NewAgentRepository(db)
 	agentHandler := handler.NewAgentHandler(agentRepo)
