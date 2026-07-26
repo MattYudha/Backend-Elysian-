@@ -46,44 +46,43 @@ func NewSwarmUsecase(
 
 func (u *SwarmUsecase) TriggerSwarm(ctx context.Context, documentID string, items []map[string]interface{}, tenantIDStr string, userIDStr string) (*domain.SwarmTask, error) {
 	var finalDocID string = documentID
-	if _, err := uuid.Parse(documentID); err != nil {
-		// Document ID is not a valid UUID (e.g. "draft-1")
-		tenantUUID, err := uuid.Parse(tenantIDStr)
-		if err != nil {
-			return nil, fmt.Errorf("invalid tenant id parameter: %w", err)
-		}
-		userUUID, err := uuid.Parse(userIDStr)
-		if err != nil {
-			return nil, fmt.Errorf("invalid user id parameter: %w", err)
-		}
+	var targetDocUUID uuid.UUID
 
-		// Generate deterministic draft UUID based on the tenant ID and the original identifier
-		draftUUID := uuid.NewSHA1(uuid.NameSpaceDNS, []byte("draft-"+tenantIDStr+"-"+documentID))
-		finalDocID = draftUUID.String()
+	tenantUUID, _ := uuid.Parse(tenantIDStr)
+	userUUID, _ := uuid.Parse(userIDStr)
 
-		// Verify or create the draft document in the database to satisfy the foreign key constraint
-		db := u.swarmRepo.GetDB()
-		var count int64
-		err = db.WithContext(ctx).Table("documents").Where("id = ?", draftUUID).Count(&count).Error
-		if err != nil {
-			return nil, fmt.Errorf("failed to check existing draft document: %w", err)
+	if parsedUUID, err := uuid.Parse(documentID); err == nil {
+		targetDocUUID = parsedUUID
+		finalDocID = parsedUUID.String()
+	} else {
+		// Document ID is not a valid UUID (e.g. "draft-1" or "audit-001")
+		// Generate deterministic draft UUID based on tenant ID and original identifier
+		targetDocUUID = uuid.NewSHA1(uuid.NameSpaceDNS, []byte("draft-"+tenantIDStr+"-"+documentID))
+		finalDocID = targetDocUUID.String()
+	}
+
+	// Verify or create the document in the database to satisfy the foreign key constraint
+	db := u.swarmRepo.GetDB()
+	var count int64
+	err := db.WithContext(ctx).Table("documents").Where("id = ?", targetDocUUID).Count(&count).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to check existing document: %w", err)
+	}
+
+	if count == 0 {
+		draftDoc := &domain.Document{
+			ID:            targetDocUUID,
+			TenantID:      tenantUUID,
+			UserID:        userUUID,
+			Title:         "Document (" + documentID + ")",
+			Category:      "general",
+			Status:        "draft",
+			CreatedAt:     time.Now(),
+			LastUpdatedAt: time.Now(),
 		}
-
-		if count == 0 {
-			draftDoc := &domain.Document{
-				ID:            draftUUID,
-				TenantID:      tenantUUID,
-				UserID:        userUUID,
-				Title:         "Draft Document (" + documentID + ")",
-				Category:      "general",
-				Status:        "draft",
-				CreatedAt:     time.Now(),
-				LastUpdatedAt: time.Now(),
-			}
-			err = db.WithContext(ctx).Table("documents").Create(draftDoc).Error
-			if err != nil {
-				return nil, fmt.Errorf("failed to auto-create draft document record: %w", err)
-			}
+		err = db.WithContext(ctx).Table("documents").Create(draftDoc).Error
+		if err != nil {
+			return nil, fmt.Errorf("failed to auto-create document record: %w", err)
 		}
 	}
 
